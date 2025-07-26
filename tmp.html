@@ -217,6 +217,7 @@ function drawStartScreen() {
     fill(255);
    rect(75, 100, 650, 400);
     fill(0);
+    textStyle(BOLD);
     textAlign(CENTER);
     textSize(32);
     text(`${characterName}'s Rebellion`, width / 2, height / 2 - 100);
@@ -238,7 +239,7 @@ function drawStartScreen() {
 function drawHelpScreen() {
   try {
     fill(0, 0, 0, 200);
-    rect(100, 100, 800, 600);
+    rect(75, 100, 650, 400);
     fill(255);
     rect(75, 120, 650, 260);
     fill(0);
