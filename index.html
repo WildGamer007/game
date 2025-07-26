@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Labubu's Rebellion</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.2/p5.min.js"></script>
+  <style>
+    body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background: #222; }
+    canvas { border: 2px solid #fff; }
+  </style>
+</head>
+<body>
+<script>
+let player, enemies, energyOrbs, level, energy, combo, gameState, boss;
+
+function setup() {
+  createCanvas(800, 600);
+  resetGame();
+}
+
+function resetGame() {
+  player = {
+    x: 50, y: 500, w: 40, h: 60, speed: 5, jump: -15, vy: 0, grounded: false,
+    attacks: { hand: 10, leg: 15, voice: 20, eye: 25, thunder: 30 },
+    currentAttack: 'hand', energy: 0, maxEnergy: 100, health: 100
+  };
+  enemies = [];
+  energyOrbs = [];
+  level = 1;
+  energy = 0;
+  combo = 0;
+  gameState = 'playing';
+  spawnEnemies();
+}
+
+function spawnEnemies() {
+  enemies = [];
+  let enemyTypes = [
+    { type: 'human', health: 20, speed: 2, damage: 5 },
+    { type: 'military', health: 40, speed: 1.5, damage: 10 },
+    { type: 'terrorist', health: 30, speed: 2.5, damage: 15 },
+    { type: 'virus', health: 10, speed: 3, damage: 5 },
+    { type: 'missile', health: 15, speed: 4, damage: 20 }
+  ];
+  let count = level * 3;
+  if (level === 10) {
+    boss = {
+      x: 700, y: 500, w: 60, h: 80, health: 500, maxHealth: 500, speed: 1,
+      attacks: ['electric', 'f16', 'missile', 'covid', 'military', 'terrorist', 'zelensky'],
+      attackCooldown: 0, minions: []
+    };
+    enemies.push(boss);
+  } else {
+    for (let i = 0; i < count; i++) {
+      let type = random(enemyTypes);
+      enemies.push({
+        x: random(400, 750), y: 500, w: 30, h: 50, ...type
+      });
+    }
+  }
+}
+
+function draw() {
+  background(50);
+  if (gameState === 'playing') {
+    updatePlayer();
+    updateEnemies();
+    updateEnergyOrbs();
+    handleCollisions();
+    drawUI();
+  } else if (gameState === 'gameover') {
+    textSize(32);
+    fill(255, 0, 0);
+    textAlign(CENTER);
+    text('Game Over! Press R to Restart', width / 2, height / 2);
+  } else if (gameState === 'win') {
+    textSize(32);
+    fill(0, 255, 0);
+    textAlign(CENTER);
+    text('You Win! Press R to Restart', width / 2, height / 2);
+  }
+}
+
+function updatePlayer() {
+  // Movement
+  if (keyIsDown(LEFT_ARROW)) player.x -= player.speed;
+  if (keyIsDown(RIGHT_ARROW)) player.x += player.speed;
+  if (keyIsDown(UP_ARROW) && player.grounded) {
+    player.vy = player.jump;
+    player.grounded = false;
+  }
+  player.vy += 0.5; // Gravity
+  player.y += player.vy;
+  if (player.y >= 500) {
+    player.y = 500;
+    player.vy = 0;
+    player.grounded = true;
+  }
+  player.x = constrain(player.x, 0, width - player.w);
+
+  // Draw player (Labubu-like)
+  fill(255, 192, 203);
+  rect(player.x, player.y, player.w, player.h);
+  fill(0);
+  ellipse(player.x + 10, player.y + 20, 5, 5); // Eyes
+  ellipse(player.x + 30, player.y + 20, 5, 5);
+}
+
+function updateEnemies() {
+  for (let e of enemies) {
+    if (e.type === 'missile' || e.type === 'virus') {
+      e.x -= e.speed;
+    } else {
+      if (player.x < e.x) e.x -= e.speed;
+      else if (player.x > e.x) e.x += e.speed;
+    }
+    e.x = constrain(e.x, 0, width - e.w);
+
+    // Boss logic
+    if (e === boss) {
+      e.attackCooldown--;
+      if (e.attackCooldown <= 0) {
+        let attack = random(e.attacks);
+        if (attack === 'electric') {
+          enemies.push({ x: e.x, y: e.y, w: 50, h: 10, type: 'electric', health: 10, speed: 5, damage: 20 });
+        } else if (attack === 'f16') {
+          e.minions.push({ x: 800, y: 100, w: 40, h: 20, type: 'f16', health: 30, speed: 3, damage: 15 });
+        } else if (attack === 'missile') {
+          enemies.push({ x: e.x, y: e.y, w: 20, h: 10, type: 'missile', health: 15, speed: 4, damage: 20 });
+        } else if (attack === 'covid') {
+          enemies.push({ x: e.x, y: e.y, w: 15, h: 15, type: 'virus', health: 10, speed: 3, damage: 5 });
+        } else if (attack === 'military' || attack === 'terrorist') {
+          e.minions.push({ x: e.x, y: e.y, w: 30, h: 50, type: attack, health: 30, speed: 2, damage: 10 });
+        } else if (attack === 'zelensky') {
+          e.minions.push({ x: e.x, y: e.y, w: 30, h: 50, type: 'zelensky', health: 50, speed: 2.5, damage: 15 });
+        }
+        e.attackCooldown = 60;
+      }
+      for (let m of e.minions) {
+        if (m.type === 'f16') m.x -= m.speed;
+        else {
+          if (player.x < m.x) m.x -= m.speed;
+          else if (player.x > m.x) m.x += m.speed;
+        }
+        // Draw minion
+        fill(m.type === 'f16' ? 150 : m.type === 'zelensky' ? 0 : 100);
+        rect(m.x, m.y, m.w, m.h);
+      }
+    }
+
+    // Draw enemy
+    fill(e.type === 'human' ? 200 : e.type === 'military' ? 100 : e.type === 'terrorist' ? 150 : e.type === 'virus' ? 0 : 255);
+    rect(e.x, e.y, e.w, e.h);
+  }
+}
+
+function updateEnergyOrbs() {
+  for (let orb of energyOrbs) {
+    orb.y += 2;
+    fill(255, 255, 0);
+    ellipse(orb.x, orb.y, 10, 10);
+  }
+}
+
+function handleCollisions() {
+  // Player attack
+  if (keyIsPressed && keyCode === 32 && player.energy >= player.attacks[player.currentAttack]) {
+    let attackRange = 50;
+    for (let i = enemies.length - 1; i >= 0; i--) {
+      let e = enemies[i];
+      if (dist(player.x, player.y, e.x, e.y) < attackRange) {
+        e.health -= player.attacks[player.currentAttack];
+        player.energy -= player.attacks[player.currentAttack];
+        combo++;
+        if (e.health <= 0) {
+          enemies.splice(i, 1);
+          energyOrbs.push({ x: e.x, y: e.y });
+        }
+      }
+    }
+    if (boss) {
+      for (let i = boss.minions.length - 1; i >= 0; i--) {
+        let m = boss.minions[i];
+        if (dist(player.x, player.y, m.x, m.y) < attackRange) {
+          m.health -= player.attacks[player.currentAttack];
+          player.energy -= player.attacks[player.currentAttack];
+          combo++;
+          if (m.health <= 0) boss.minions.splice(i, 1);
+        }
+      }
+    }
+  }
+
+  // Enemy collision
+  for (let e of enemies) {
+    if (collideRectRect(player.x, player.y, player.w, player.h, e.x, e.y, e.w, e.h)) {
+      player.health -= e.damage;
+      if (player.health <= 0) gameState = 'gameover';
+    }
+  }
+  if (boss) {
+    for (let m of boss.minions) {
+      if (collideRectRect(player.x, player.y, player.w, player.h, m.x, m.y, m.w, m.h)) {
+        player.health -= m.damage;
+        if (player.health <= 0) gameState = 'gameover';
+      }
+    }
+  }
+
+  // Energy orb collection
+  for (let i = energyOrbs.length - 1; i >= 0; i--) {
+    let orb = energyOrbs[i];
+    if (dist(player.x, player.y, orb.x, orb.y) < 20) {
+      player.energy = min(player.energy + 10, player.maxEnergy);
+      energyOrbs.splice(i, 1);
+    }
+  }
+
+  // Level completion
+  if (enemies.length === 0 && (!boss || boss.health <= 0)) {
+    if (level < 10) {
+      level++;
+      spawnEnemies();
+    } else {
+      gameState = 'win';
+    }
+  }
+}
+
+function drawUI() {
+  // Health and Energy
+  fill(255);
+  textSize(20);
+  text(`Health: ${player.health}`, 10, 30);
+  text(`Energy: ${player.energy}`, 10, 50);
+  text(`Level: ${level}`, 10, 70);
+  text(`Combo: ${combo}`, 10, 90);
+  // Attack selection
+  text(`Attack: ${player.currentAttack}`, 10, 110);
+  text('1:Hand 2:Leg 3:Voice 4:Eye 5:Thunder', 10, 130);
+}
+
+function keyPressed() {
+  if (key === '1') player.currentAttack = 'hand';
+  if (key === '2') player.currentAttack = 'leg';
+  if (key === '3') player.currentAttack = 'voice';
+  if (key === '4') player.currentAttack = 'eye';
+  if (key === '5') player.currentAttack = 'thunder';
+  if (key === 'r' && (gameState === 'gameover' || gameState === 'win')) resetGame();
+}
+
+// Simple collision detection helper
+function collideRectRect(x1, y1, w1, h1, x2, y2, w2, h2) {
+  return x1 + w1w1 + w1 > x2 && x2 + w2w2 + x2 > x1 && y1 + h1h1 + h1 > y2 && y2 + h2h2 + y2 > y1;
+}
+</script>
+</body>
+</html>
