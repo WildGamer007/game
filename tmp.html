@@ -32,24 +32,24 @@ let maxConsoleMessages = 5;
 
 function preload() {
   try {
-    bgImage = loadImage('https://images.unsplash.com/photo-1519638399536-2b738d0e8a9a?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&h=600', 
+    bgImage = loadImage('war_image.png', 
       () => logToConsole("Background image loaded"),
       () => { console.error('Failed to load background image'); logToConsole("Background image failed to load"); }
     );
     if (typeof loadSound === 'function') {
-      jumpSound = loadSound('https://www.soundjay.com/buttons/sounds/button-09.mp3', 
+      jumpSound = loadSound('button-09a.mp3', 
         () => logToConsole("Jump sound loaded"),
         () => { console.error('Failed to load jump sound'); logToConsole("Jump sound failed to load"); }
       );
-      attackSound = loadSound('https://www.soundjay.com/human/sounds/hit-01.mp3',
+      attackSound = loadSound('button-09a.mp3',
         () => logToConsole("Attack sound loaded"),
         () => { console.error('Failed to load attack sound'); logToConsole("Attack sound failed to load"); }
       );
-      enemyDieSound = loadSound('https://www.soundjay.com/human/sounds/scream-01.mp3',
+      enemyDieSound = loadSound('bone-crack-1.mp3',
         () => logToConsole("Enemy death sound loaded"),
         () => { console.error('Failed to load enemy death sound'); logToConsole("Enemy death sound failed to load"); }
       );
-      bgMusic = loadSound('https://www.bensound.com/bensound-music/bensound-epic.mp3',
+      bgMusic = loadSound('war_bg_sound.mp3',
         () => logToConsole("Background music loaded"),
         () => { console.error('Failed to load background music'); logToConsole("Background music failed to load"); }
       );
