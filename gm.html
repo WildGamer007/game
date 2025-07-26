@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Labubu's Rebellion</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.2/p5.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.2/addons/p5.sound.min.js"></script>
+  <style>
+    body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background: #222; }
+    canvas { border: 2px solid #fff; }
+    #settings { position: absolute; top: 10px; left: 10px; background: rgba(0, 0, 0, 0.8); color: white; padding: 10px; }
+    #settings input, #settings button { margin: 5px; }
+  </style>
+</head>
+<body>
+  <div id="settings">
+    <label>Character Name: <input type="text" id="charName" value="Labubu"></label><br>
+    <label>Unlimited Powers: <input type="checkbox" id="unlimitedPowers"></label><br>
+    <button onclick="applySettings()">Apply Settings</button>
+  </div>
+<script>
+let player, enemies, energyOrbs, level, energy, combo, gameState, boss, showHelp, attackTimer;
+let bgImage, jumpSound, attackSound, enemyDieSound, bgMusic;
+let characterName = "Labubu";
+let unlimitedPowers = false;
+let consoleMessages = []; // Array to store console messages
+let maxConsoleMessages = 5; // Limit to 5 messages for display
+
+function preload() {
+  bgImage = loadImage('https://github.com/WildGamer007/game/blob/main/war_image.png');
+  jumpSound = loadSound('https://github.com/WildGamer007/game/blob/main/button-09a.mp3');
+  attackSound = loadSound('https://github.com/WildGamer007/game/blob/main/button-09a.mp3');
+  enemyDieSound = loadSound('https://github.com/WildGamer007/game/blob/main/button-09a.mp3');
+  bgMusic = loadSound('https://github.com/WildGamer007/game/blob/main/bone-crack-1.mp3');
+}
+
+function setup() {
+  createCanvas(800, 600);
+  resetGame();
+  bgMusic.loop();
+  logToConsole("Game initialized");
+}
+
+function applySettings() {
+  let oldName = characterName;
+  characterName = document.getElementById('charName').value || "Labubu";
+  unlimitedPowers = document.getElementById('unlimitedPowers').checked;
+  logToConsole(`Settings updated: Name=${characterName}, UnlimitedPowers=${unlimitedPowers}`);
+  if (oldName !== characterName) {
+    logToConsole(`Character name changed from ${oldName} to ${characterName}`);
+  }
+}
+
+function logToConsole(message) {
+  consoleMessages.push(`${frameCount}: ${message}`);
+  if (consoleMessages.length > maxConsoleMessages) {
+    consoleMessages.shift(); // Remove oldest message
+  }
+}
+
+function resetGame() {
+  player = {
+    x: 50, y: 500, w: 13, h: 20, speed: 5, jump: -15, vy: 0, grounded: false,
+    attacks: { hand: 10, leg: 15, voice: 20, eye: 25, thunder: 30 },
+    currentAttack: 'hand', energy: 50, maxEnergy: 100, health: 100,
+    attackActive: false, attackFrame: 0
+  };
+  enemies = [];
+  energyOrbs = [];
+  level = 1;
+  energy = 0;
+  combo = 0;
+  gameState = 'start';
+  boss = null;
+  showHelp = false;
+  attackTimer = 0;
+  consoleMessages = [];
+  spawnEnemies();
+  logToConsole("Game reset");
+}
+
+function spawnEnemies() {
+  enemies = [];
+  let enemyTypes = [
+    { type: 'human', health: 20, speed: 1, damage: 5, w: 15, h: 25 },
+    { type: 'military', health: 40, speed: 0.75, damage: 10, w: 15, h: 25 },
+    { type: 'terrorist', health: 30, speed: 1.25, damage: 15, w: 15, h: 25 },
+    { type: 'virus', health: 10, speed: 1.5, damage: 5, w: 7.5, h: 7.5 },
+    { type: 'missile', health: 15, speed: 2, damage: 20, w: 10, h: 5 }
+  ];
+  let count = level * 3;
+  if (level === 10) {
+    boss = {
+      x: 700, y: 500, w: 30, h: 40, health: 500, maxHealth: 500, speed: 0.5,
+      attacks: ['electric', 'f16', 'missile', 'covid', 'military', 'terrorist', 'zelensky'],
+      attackCooldown: 0, minions: []
+    };
+    enemies.push(boss);
+    logToConsole("Boss spawned");
+  } else {
+    for (let i = 0; i < count; i++) {
+      let type = random(enemyTypes);
+      enemies.push({
+        x: random(400, 750), y: 500, ...type
+      });
+    }
+    logToConsole(`Spawned ${count} enemies for level ${level}`);
+  }
+}
+
+function draw() {
+  image(bgImage, 0, 0, width, height);
+  if (gameState === 'start') {
+    drawStartScreen();
+  } else if (gameState === 'playing') {
+    updatePlayer();
+    updateEnemies();
+    updateEnergyOrbs();
+    handleCollisions();
+    drawUI();
+    if (showHelp) drawHelpScreen();
+    drawConsole();
+  } else if (gameState === 'gameover') {
+    textSize(32);
+    fill(255, 0, 0);
+    textAlign(CENTER);
+    text('Game Over! Press R to Restart', width / 2, height / 2);
+  } else if (gameState === 'win') {
+    textSize(32);
+    fill(0, 255, 0);
+    textAlign(CENTER);
+    text('You Win! Press R to Restart', width / 2, height / 2);
+  }
+}
+
+function drawConsole() {
+  // Draw console background
+  fill(0, 0, 0, 200);
+  rect(width - 200, height - 120, 190, 110);
+  // Draw console messages
+  fill(255);
+  textAlign(LEFT);
+  textSize(12);
+  for (let i = 0; i < consoleMessages.length; i++) {
+    text(consoleMessages[i], width - 195, height - 100 + i * 20);
+  }
+}
+
+function drawStartScreen() {
+  fill(255);
+  textAlign(CENTER);
+  textSize(32);
+  text(`${characterName}'s Rebellion`, width / 2, height / 2 - 100);
+  textSize(20);
+  text("Controls:", width / 2, height / 2 - 50);
+  text("Left/Right Arrows: Move", width / 2, height / 2 - 20);
+  text("Up Arrow: Jump", width / 2, height / 2 + 10);
+  text("Spacebar: Attack (uses energy)", width / 2, height / 2 + 40);
+  text("1-5: Select Attack (Hand:10, Leg:15, Voice:20, Eye:25, Thunder:30)", width / 2, height / 2 + 70);
+  text("H: Show/Hide Help", width / 2, height / 2 + 100);
+  text("R: Restart (on Game Over/Win)", width / 2, height / 2 + 130);
+  text("Press S to Start", width / 2, height / 2 + 160);
+}
+
+function drawHelpScreen() {
+  fill(0, 0, 0, 200);
+  rect(100, 100, 600, 400);
+  fill(255);
+  textAlign(CENTER);
+  textSize(24);
+  text("Controls", width / 2, 150);
+  textSize(18);
+  text("Left/Right Arrows: Move", width / 2, 200);
+  text("Up Arrow: Jump", width / 2, 230);
+  text("Spacebar: Attack (uses energy)", width / 2, 260);
+  text("1-5: Select Attack (Hand:10, Leg:15, Voice:20, Eye:25, Thunder:30)", width / 2, 290);
+  text("H: Show/Hide Help", width / 2, 320);
+  text("R: Restart (on Game Over/Win)", width / 2, 350);
+  text("Press H to Close", width / 2, 380);
+}
+
+function updatePlayer() {
+  if (keyIsDown(LEFT_ARROW)) {
+    player.x -= player.speed;
+    logToConsole(`${characterName} moved left`);
+  }
+  if (keyIsDown(RIGHT_ARROW)) {
+    player.x += player.speed;
+    logToConsole(`${characterName} moved right`);
+  }
+  if (keyIsDown(UP_ARROW) && player.grounded) {
+    player.vy = player.jump;
+    player.grounded = false;
+    jumpSound.play();
+    logToConsole(`${characterName} jumped`);
+  }
+  player.vy += 0.5;
+  player.y += player.vy;
+  if (player.y >= 500) {
+    player.y = 500;
+    player.vy = 0;
+    player.grounded = true;
+  }
+  player.x = constrain(player.x, 0, width - player.w);
+
+  if (player.attackActive) {
+    player.attackFrame++;
+    if (player.attackFrame > 10) {
+      player.attackActive = false;
+      player.attackFrame = 0;
+    }
+  }
+
+  fill(255, 0, 0);
+  rect(player.x, player.y - 5, player.w, 5, 2);
+  fill(255);
+  ellipse(player.x + player.w / 2, player.y + 6, 10, 7);
+  fill(0);
+  ellipse(player.x + 4, player.y + 4, 2, 3);
+  ellipse(player.x + 9, player.y + 4, 2, 3);
+  noFill();
+  stroke(0);
+  arc(player.x + player.w / 2, player.y + 8, 4, 2, 0, PI);
+  noStroke();
+  fill(0, 0, 255);
+  rect(player.x, player.y + 5, player.w, player.h - 10);
+  fill(255, 0, 0);
+  rect(player.x, player.y + 10, player.w, 5);
+  fill(255);
+  if (player.attackActive && player.currentAttack === 'hand') {
+    ellipse(player.x + player.w + 12, player.y + 7, 12, 12);
+    ellipse(player.x - 3, player.y + 7, 3, 3);
+  } else {
+    ellipse(player.x + player.w, player.y + 7, 12, 12);
+    ellipse(player.x, player.y + 7, 3, 3);
+  }
+  fill(139, 69, 19);
+  if (player.attackActive && player.currentAttack === 'leg') {
+    rect(player.x + 2, player.y + player.h, 4, 7);
+    rect(player.x + 7, player.y + player.h, 4, 7);
+  } else {
+    rect(player.x + 2, player.y + player.h, 4, 4);
+    rect(player.x + 7, player.y + player.h, 4, 4);
+  }
+  if (player.attackActive) {
+    if (player.currentAttack === 'voice') {
+      fill(255, 255, 0, 150);
+      arc(player.x + player.w / 2, player.y + 8, 17, 10, 0, HALF_PI);
+    } else if (player.currentAttack === 'eye') {
+      stroke(255, 0, 0);
+      line(player.x + 4, player.y + 4, player.x + 21, player.y + 4);
+      line(player.x + 9, player.y + 4, player.x + 26, player.y + 4);
+      noStroke();
+    } else if (player.currentAttack === 'thunder') {
+      fill(0, 255, 255, 150);
+      ellipse(player.x + player.w / 2, player.y, 20, 20);
+    }
+  }
+}
+
+function updateEnemies() {
+  for (let i = enemies.length - 1; i >= 0; i--) {
+    let e = enemies[i];
+    if (e.type === 'missile' || e.type === 'virus') {
+      e.x -= e.speed;
+    } else {
+      if (player.x < e.x) e.x -= e.speed;
+      else if (player.x > e.x) e.x += e.speed;
+    }
+    e.x = constrain(e.x, 0, width - e.w);
+
+    if (e === boss) {
+      e.attackCooldown--;
+      if (e.attackCooldown <= 0) {
+        let attack = random(e.attacks);
+        if (attack === 'electric') {
+          enemies.push({ x: e.x, y: e.y, w: 25, h: 5, type: 'electric', health: 10, speed: 2.5, damage: 20 });
+          logToConsole("Boss used electric attack");
+        } else if (attack === 'f16') {
+          e.minions.push({ x: 800, y: 100, w: 20, h: 10, type: 'f16', health: 30, speed: 1.5, damage: 15 });
+          logToConsole("Boss spawned F16 minion");
+        } else if (attack === 'missile') {
+          enemies.push({ x: e.x, y: e.y, w: 10, h: 5, type: 'missile', health: 15, speed: 2, damage: 20 });
+          logToConsole("Boss used missile attack");
+        } else if (attack === 'covid') {
+          enemies.push({ x: e.x, y: e.y, w: 7.5, h: 7.5, type: 'virus', health: 10, speed: 1.5, damage: 5 });
+          logToConsole("Boss used covid attack");
+        } else if (attack === 'military' || attack === 'terrorist') {
+          e.minions.push({ x: e.x, y: e.y, w: 15, h: 25, type: attack, health: 30, speed: 1, damage: 10 });
+          logToConsole(`Boss spawned ${attack} minion`);
+        } else if (attack === 'zelensky') {
+          e.minions.push({ x: e.x, y: e.y, w: 15, h: 25, type: 'zelensky', health: 50, speed: 1.25, damage: 15 });
+          logToConsole("Boss spawned Zelensky minion");
+        }
+        e.attackCooldown = 60;
+      }
+      for (let j = e.minions.length - 1; j >= 0; j--) {
+        let m = e.minions[j];
+        if (m.type === 'f16') m.x -= m.speed;
+        else {
+          if (player.x < m.x) m.x -= m.speed;
+          else if (player.x > m.x) m.x += m.speed;
+        }
+        fill(m.type === 'f16' ? 150 : m.type === 'zelensky' ? 0 : 100);
+        rect(m.x, m.y, m.w, m.h);
+      }
+    }
+
+    fill(e.type === 'human' ? 200 : e.type === 'military' ? 100 : e.type === 'terrorist' ? 150 : e.type === 'virus' ? 0 : e.type === 'electric' ? 255 : 255);
+    rect(e.x, e.y, e.w, e.h);
+  }
+}
+
+function updateEnergyOrbs() {
+  for (let orb of energyOrbs) {
+    orb.y += 2;
+    fill(255, 255, 0);
+    ellipse(orb.x, orb.y, 10, 10);
+  }
+}
+
+function handleCollisions() {
+  if (player.attackActive) {
+    let attackRange = 17;
+    for (let i = enemies.length - 1; i >= 0; i--) {
+      let e = enemies[i];
+      if (collideRectRect(player.x + player.w / 2 - attackRange / 2, player.y, attackRange, player.h, e.x, e.y, e.w, e.h)) {
+        e.health -= player.attacks[player.currentAttack];
+        if (!unlimitedPowers) player.energy -= player.attacks[player.currentAttack];
+        combo++;
+        if (e.health <= 0) {
+          enemies.splice(i, 1);
+          energyOrbs.push({ x: e.x, y: e.y });
+          enemyDieSound.play();
+          logToConsole(`Enemy (${e.type}) defeated`);
+          if (!unlimitedPowers) player.energy = min(player.energy + 5, player.maxEnergy);
+        }
+      }
+    }
+    if (boss) {
+      for (let i = boss.minions.length - 1; i >= 0; i--) {
+        let m = boss.minions[i];
+        if (collideRectRect(player.x + player.w / 2 - attackRange / 2, player.y, attackRange, player.h, m.x, m.y, m.w, m.h)) {
+          m.health -= player.attacks[player.currentAttack];
+          if (!unlimitedPowers) player.energy -= player.attacks[player.currentAttack];
+          combo++;
+          if (m.health <= 0) {
+            boss.minions.splice(i, 1);
+            enemyDieSound.play();
+            logToConsole(`Boss minion (${m.type}) defeated`);
+            if (!unlimitedPowers) player.energy = min(player.energy + 5, player.maxEnergy);
+          }
+        }
+      }
+    }
+  }
+
+  for (let e of enemies) {
+    if (collideRectRect(player.x, player.y, player.w, player.h, e.x, e.y, e.w, e.h)) {
+      player.health -= e.damage;
+      logToConsole(`${characterName} took ${e.damage} damage from ${e.type}`);
+      if (player.health <= 0) {
+        gameState = 'gameover';
+        logToConsole("Game over");
+      }
+    }
+  }
+  if (boss) {
+    for (let m of boss.minions) {
+      if (collideRectRect(player.x, player.y, player.w, player.h, m.x, m.y, m.w, m.h)) {
+        player.health -= m.damage;
+        logToConsole(`${characterName} took ${m.damage} damage from boss minion ${m.type}`);
+        if (player.health <= 0) {
+          gameState = 'gameover';
+          logToConsole("Game over");
+        }
+      }
+    }
+  }
+
+  for (let i = energyOrbs.length - 1; i >= 0; i--) {
+    let orb = energyOrbs[i];
+    if (dist(player.x + player.w / 2, player.y + player.h / 2, orb.x, orb.y) < 7) {
+      player.energy = min(player.energy + 10, player.maxEnergy);
+      energyOrbs.splice(i, 1);
+      logToConsole(`${characterName} collected energy orb`);
+    }
+  }
+
+  if (enemies.length === 0 && (!boss || (boss && boss.health <= 0 && boss.minions.length === 0))) {
+    if (level < 10) {
+      level++;
+      spawnEnemies();
+      logToConsole(`Advanced to level ${level}`);
+    } else {
+      gameState = 'win';
+      logToConsole("Game won");
+    }
+  }
+}
+
+function drawUI() {
+  fill(255);
+  textSize(20);
+  text(`Name: ${characterName}`, 10, 30);
+  text(`Health: ${player.health}`, 10, 50);
+  text(`Energy: ${player.energy}`, 10, 70);
+  text(`Level: ${level}`, 10, 90);
+  text(`Combo: ${combo}`, 10, 110);
+  text(`Attack: ${player.currentAttack}`, 10, 130);
+  text('1:Hand 2:Leg 3:Voice 4:Eye 5:Thunder', 10, 150);
+  text('H: Help', 10, 170);
+  if (boss) {
+    fill(255, 0, 0);
+    rect(600, 20, map(boss.health, 0, boss.maxHealth, 0, 180), 20);
+    fill(255);
+    text('Boss Health', 520, 35);
+  }
+}
+
+function keyPressed() {
+  if (key === 's' && gameState === 'start') {
+    gameState = 'playing';
+    logToConsole("Game started");
+  }
+  if (key === 'h' && gameState === 'playing') {
+    showHelp = !showHelp;
+    logToConsole(`Help screen ${showHelp ? 'shown' : 'hidden'}`);
+  }
+  if (key === '1') {
+    player.currentAttack = 'hand';
+    logToConsole("Selected hand attack");
+  }
+  if (key === '2') {
+    player.currentAttack = 'leg';
+    logToConsole("Selected leg attack");
+  }
+  if (key === '3') {
+    player.currentAttack = 'voice';
+    logToConsole("Selected voice attack");
+  }
+  if (key === '4') {
+    player.currentAttack = 'eye';
+    logToConsole("Selected eye attack");
+  }
+  if (key === '5') {
+    player.currentAttack = 'thunder';
+    logToConsole("Selected thunder attack");
+  }
+  if (key === 'r' && (gameState === 'gameover' || gameState === 'win')) {
+    resetGame();
+    logToConsole("Game restarted");
+  }
+  if (keyCode === 32 && gameState === 'playing' && !player.attackActive && (unlimitedPowers || player.energy >= player.attacks[player.currentAttack])) {
+    player.attackActive = true;
+    player.attackFrame = 0;
+    attackSound.play();
+    logToConsole(`${characterName} attacked with ${player.currentAttack}`);
+  }
+}
+
+function collideRectRect(x1, y1, w1, h1, x2, y2, w2, h2) {
+  return x1 + w1 > x2 && x2 + w2 > x1 && y1 + h1 > y2 && y2 + h2 > y1;
+}
+</script>
+</body>
+</html>
