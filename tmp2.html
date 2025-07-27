@@ -29,8 +29,8 @@
 </head>
 <body>
   <div id="controls">
-    <p>Player 1 (Left): A/D (Move), W (Jump), F (Punch), G (Kick)</p>
-    <p>Player 2 (Right): Arrow Left/Right (Move), Up (Jump), L (Punch), ; (Kick)</p>
+    <p>Player 1 (Blue): A/D (Move), W (Jump), F (Punch), G (Kick)</p>
+    <p>Player 2 (Red): Arrow Left/Right (Move), Up (Jump), L (Punch), ; (Kick)</p>
     <p>Press punch/kick rapidly for combos!</p>
   </div>
   <script>
@@ -46,21 +46,21 @@
 
       // Create ground
       ground = createSprite(width / 2, height - 50, width, 100);
+      ground.shapeColor = color(100, 100, 100);
       ground.immovable = true;
 
-      // Player 1 (left side, facing right)
+      // Player 1 (blue rectangle, left side, facing right)
       player1 = createSprite(200, height - 150, 50, 100);
-      player1.addAnimation('idle', 'https://raw.githubusercontent.com/molleindustria/p5.play/master/examples/animation/assets/asterisk_normal0001.png', 'https://raw.githubusercontent.com/molleindustria/p5.play/master/examples/animation/assets/asterisk_normal0003.png');
-      player1.scale = 0.5;
+      player1.shapeColor = color(0, 0, 255);
       player1.setCollider('rectangle', 0, 0, 50, 100);
       player1.mass = 1;
       player1.friction = 0.1;
 
-      // Player 2 (right side, facing left)
+      // Player 2 (red rectangle, right side, facing left)
       player2 = createSprite(600, height - 150, 50, 100);
-      player2.addAnimation('idle', 'https://raw.githubusercontent.com/molleindustria/p5.play/master/examples/animation/assets/asterisk_circle0006.png', 'https://raw.githubusercontent.com/molleindustria/p5.play/master/examples/animation/assets/asterisk_circle0008.png');
-      player2.scale = 0.5;
+      player2.shapeColor = color(255, 0, 0);
       player2.setCollider('rectangle', 0, 0, 50, 100);
+      player2.mirrorX(-1);
       player2.mass = 1;
       player2.friction = 0.1;
     }
@@ -74,6 +74,7 @@
       rect(width - 250, 20, player2Health * 2, 20);
       fill(255);
       textSize(16);
+      textAlign(LEFT);
       text('Player 1: ' + player1Health + '%', 50, 60);
       text('Player 2: ' + player2Health + '%', width - 250, 60);
 
@@ -97,14 +98,8 @@
         player1.position.x += 5;
         player1.mirrorX(1);
       }
-      if (keyIsDown(87) && player1.position.y >= height - 150) { // W - Jump
-        player1.velocity.y = -10;
-      }
-      if (keyIsDown(70)) { // F - Punch
-        performAttack(player1, player2, 'punch');
-      }
-      if (keyIsDown(71)) { // G - Kick
-        performAttack(player1, player2, 'kick');
+      if (keyIsDown(87) && abs(player1.position.y - (height - 150)) < 5) { // W - Jump
+        player1.velocity.y = -12;
       }
 
       // Player 2 controls
@@ -116,13 +111,21 @@
         player2.position.x += 5;
         player2.mirrorX(1);
       }
-      if (keyIsDown(UP_ARROW) && player2.position.y >= height - 150) { // Up - Jump
-        player2.velocity.y = -10;
+      if (keyIsDown(UP_ARROW) && abs(player2.position.y - (height - 150)) < 5) { // Up - Jump
+        player2.velocity.y = -12;
       }
-      if (keyIsDown(76)) { // L - Punch
+
+      // Handle attacks
+      if (keyWentDown(70)) { // F - Player 1 Punch
+        performAttack(player1, player2, 'punch');
+      }
+      if (keyWentDown(71)) { // G - Player 1 Kick
+        performAttack(player1, player2, 'kick');
+      }
+      if (keyWentDown(76)) { // L - Player 2 Punch
         performAttack(player2, player1, 'punch');
       }
-      if (keyIsDown(186)) { // ; - Kick
+      if (keyWentDown(186)) { // ; - Player 2 Kick
         performAttack(player2, player1, 'kick');
       }
 
@@ -135,13 +138,13 @@
       player2.collide(ground);
 
       // Keep players within bounds
-      player1.position.x = constrain(player1.position.x, 0, width);
-      player2.position.x = constrain(player2.position.x, 0, width);
+      player1.position.x = constrain(player1.position.x, 25, width - 25);
+      player2.position.x = constrain(player2.position.x, 25, width - 25);
 
       // Draw sprites
       drawSprites();
 
-      // Reset combos after delay
+      // Reset combos after 1-second delay
       if (millis() - lastHitTime1 > 1000) player1Combo = 0;
       if (millis() - lastHitTime2 > 1000) player2Combo = 0;
     }
@@ -149,30 +152,32 @@
     function performAttack(attacker, defender, type) {
       let damage = type === 'punch' ? 5 : 8;
       let comboMultiplier = attacker === player1 ? player1Combo : player2Combo;
-      damage *= (1 + comboMultiplier * 0.5); // Increase damage with combo
+      damage *= (1 + comboMultiplier * 0.2); // Smaller combo multiplier for balance
 
       // Create temporary attack hitbox
       let hitbox = createSprite(
-        attacker.position.x + (attacker.mirrorX() > 0 ? 30 : -30),
-        attacker.position.y,
-        30,
-        50
+        attacker.position.x + (attacker.mirrorX() > 0 ? 40 : -40),
+        attacker.position.y - 25,
+        40,
+        60
       );
-      hitbox.visible = false;
-      hitbox.life = 10; // Remove hitbox after a few frames
+      hitbox.shapeColor = color(255, 255, 0, 100); // Visible for debugging
+      hitbox.life = 10; // Remove after ~10 frames
 
       if (hitbox.overlap(defender)) {
         if (attacker === player1) {
-          player2Health -= damage;
+          player2Health = max(0, player2Health - damage);
           player1Combo++;
           lastHitTime1 = millis();
+          // Knockback
+          defender.position.x += attacker.mirrorX() * 15;
         } else {
-          player1Health -= damage;
+          player1Health = max(0, player1Health - damage);
           player2Combo++;
           lastHitTime2 = millis();
+          // Knockback
+          defender.position.x += attacker.mirrorX() * 15;
         }
-        // Knockback
-        defender.position.x += attacker.mirrorX() * 10;
       }
     }
   </script>
