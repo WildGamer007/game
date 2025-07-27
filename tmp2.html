@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>2D Fighting Game</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.2/p5.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.2/addons/p5.play.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      background: #222;
+    }
+    canvas {
+      border: 2px solid #444;
+    }
+    #controls {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      color: white;
+      font-family: Arial, sans-serif;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div id="controls">
+    <p>Player 1 (Left): A/D (Move), W (Jump), F (Punch), G (Kick)</p>
+    <p>Player 2 (Right): Arrow Left/Right (Move), Up (Jump), L (Punch), ; (Kick)</p>
+    <p>Press punch/kick rapidly for combos!</p>
+  </div>
+  <script>
+    let player1, player2;
+    let ground;
+    let player1Health = 100, player2Health = 100;
+    let player1Combo = 0, player2Combo = 0;
+    let lastHitTime1 = 0, lastHitTime2 = 0;
+    let gameState = 'playing';
+
+    function setup() {
+      createCanvas(800, 600);
+
+      // Create ground
+      ground = createSprite(width / 2, height - 50, width, 100);
+      ground.immovable = true;
+
+      // Player 1 (left side, facing right)
+      player1 = createSprite(200, height - 150, 50, 100);
+      player1.addAnimation('idle', 'https://raw.githubusercontent.com/molleindustria/p5.play/master/examples/animation/assets/asterisk_normal0001.png', 'https://raw.githubusercontent.com/molleindustria/p5.play/master/examples/animation/assets/asterisk_normal0003.png');
+      player1.scale = 0.5;
+      player1.setCollider('rectangle', 0, 0, 50, 100);
+      player1.mass = 1;
+      player1.friction = 0.1;
+
+      // Player 2 (right side, facing left)
+      player2 = createSprite(600, height - 150, 50, 100);
+      player2.addAnimation('idle', 'https://raw.githubusercontent.com/molleindustria/p5.play/master/examples/animation/assets/asterisk_circle0006.png', 'https://raw.githubusercontent.com/molleindustria/p5.play/master/examples/animation/assets/asterisk_circle0008.png');
+      player2.scale = 0.5;
+      player2.setCollider('rectangle', 0, 0, 50, 100);
+      player2.mass = 1;
+      player2.friction = 0.1;
+    }
+
+    function draw() {
+      background(50);
+
+      // Draw health bars
+      fill(255, 0, 0);
+      rect(50, 20, player1Health * 2, 20);
+      rect(width - 250, 20, player2Health * 2, 20);
+      fill(255);
+      textSize(16);
+      text('Player 1: ' + player1Health + '%', 50, 60);
+      text('Player 2: ' + player2Health + '%', width - 250, 60);
+
+      // Game over condition
+      if (player1Health <= 0 || player2Health <= 0) {
+        gameState = 'over';
+        fill(255);
+        textSize(32);
+        textAlign(CENTER);
+        text(player1Health <= 0 ? 'Player 2 Wins!' : 'Player 1 Wins!', width / 2, height / 2);
+        noLoop();
+        return;
+      }
+
+      // Player 1 controls
+      if (keyIsDown(65)) { // A - Move left
+        player1.position.x -= 5;
+        player1.mirrorX(-1);
+      }
+      if (keyIsDown(68)) { // D - Move right
+        player1.position.x += 5;
+        player1.mirrorX(1);
+      }
+      if (keyIsDown(87) && player1.position.y >= height - 150) { // W - Jump
+        player1.velocity.y = -10;
+      }
+      if (keyIsDown(70)) { // F - Punch
+        performAttack(player1, player2, 'punch');
+      }
+      if (keyIsDown(71)) { // G - Kick
+        performAttack(player1, player2, 'kick');
+      }
+
+      // Player 2 controls
+      if (keyIsDown(LEFT_ARROW)) { // Left - Move left
+        player2.position.x -= 5;
+        player2.mirrorX(-1);
+      }
+      if (keyIsDown(RIGHT_ARROW)) { // Right - Move right
+        player2.position.x += 5;
+        player2.mirrorX(1);
+      }
+      if (keyIsDown(UP_ARROW) && player2.position.y >= height - 150) { // Up - Jump
+        player2.velocity.y = -10;
+      }
+      if (keyIsDown(76)) { // L - Punch
+        performAttack(player2, player1, 'punch');
+      }
+      if (keyIsDown(186)) { // ; - Kick
+        performAttack(player2, player1, 'kick');
+      }
+
+      // Apply gravity
+      player1.velocity.y += 0.5;
+      player2.velocity.y += 0.5;
+
+      // Collide with ground
+      player1.collide(ground);
+      player2.collide(ground);
+
+      // Keep players within bounds
+      player1.position.x = constrain(player1.position.x, 0, width);
+      player2.position.x = constrain(player2.position.x, 0, width);
+
+      // Draw sprites
+      drawSprites();
+
+      // Reset combos after delay
+      if (millis() - lastHitTime1 > 1000) player1Combo = 0;
+      if (millis() - lastHitTime2 > 1000) player2Combo = 0;
+    }
+
+    function performAttack(attacker, defender, type) {
+      let damage = type === 'punch' ? 5 : 8;
+      let comboMultiplier = attacker === player1 ? player1Combo : player2Combo;
+      damage *= (1 + comboMultiplier * 0.5); // Increase damage with combo
+
+      // Create temporary attack hitbox
+      let hitbox = createSprite(
+        attacker.position.x + (attacker.mirrorX() > 0 ? 30 : -30),
+        attacker.position.y,
+        30,
+        50
+      );
+      hitbox.visible = false;
+      hitbox.life = 10; // Remove hitbox after a few frames
+
+      if (hitbox.overlap(defender)) {
+        if (attacker === player1) {
+          player2Health -= damage;
+          player1Combo++;
+          lastHitTime1 = millis();
+        } else {
+          player1Health -= damage;
+          player2Combo++;
+          lastHitTime2 = millis();
+        }
+        // Knockback
+        defender.position.x += attacker.mirrorX() * 10;
+      }
+    }
+  </script>
+</body>
+</html>
