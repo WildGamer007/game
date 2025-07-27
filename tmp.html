@@ -7,11 +7,18 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.2/p5.min.js" onload="console.log('p5.js loaded')" onerror="console.error('Failed to load p5.js')"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.2/addons/p5.sound.min.js" onload="console.log('p5.sound.js loaded')" onerror="console.error('Failed to load p5.sound.js')"></script>
   <style>
-    body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background: #222; }
+    body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background: #222; touch-action: none; }
     canvas { border: 2px solid #fff; }
     #settings { position: absolute; top: 10px; left: 10px; background: rgba(0, 0, 0, 0.8); color: white; padding: 10px; }
     #settings input, #settings button { margin: 5px; }
     .hidden { display: none; }
+    #touchControls { position: absolute; bottom: 20px; width: 100%; display: flex; justify-content: space-between; pointer-events: none; }
+    #joystickContainer { position: relative; width: 100px; height: 100px; margin-left: 20px; pointer-events: auto; }
+    #joystickBase { position: absolute; width: 100px; height: 100px; background: rgba(255, 255, 255, 0.3); border-radius: 50%; }
+    #joystickHandle { position: absolute; width: 40px; height: 40px; background: rgba(255, 0, 0, 0.7); border-radius: 50%; }
+    #attackButton, #switchAttackButton { pointer-events: auto; width: 60px; height: 60px; border-radius: 50%; margin-right: 20px; font-size: 16px; color: white; border: none; }
+    #attackButton { background: rgba(0, 255, 0, 0.7); }
+    #switchAttackButton { background: rgba(0, 0, 255, 0.7); }
   </style>
 </head>
 <body>
@@ -21,6 +28,16 @@
     <label>Number of Lives (1-10): <input type="number" id="playerLives" value="3" min="1" max="10"></label><br>
     <button onclick="applySettings()">Apply Settings</button>
   </div>
+  <div id="touchControls" class="hidden">
+    <div id="joystickContainer">
+      <div id="joystickBase"></div>
+      <div id="joystickHandle"></div>
+    </div>
+    <div>
+      <button id="attackButton">Attack</button>
+      <button id="switchAttackButton">Switch</button>
+    </div>
+  </div>
 <script>
 let player, enemies, energyOrbs, level, energy, combo, gameState, boss, showHelp, attackTimer;
 let bgImage = null, jumpSound = null, attackSound = null, enemyDieSound = null, bgMusic = null;
@@ -29,6 +46,10 @@ let unlimitedPowers = false;
 let playerLives = 3;
 let consoleMessages = [];
 let maxConsoleMessages = 5;
+let joystick = { active: false, x: 0, y: 0, baseX: 70, baseY: 530, handleX: 70, handleY: 530, radius: 50 };
+let attackButtonPressed = false;
+let attackTypes = ['hand', 'leg', 'voice', 'eye', 'thunder', 'missile'];
+let currentAttackIndex = 0;
 
 function preload() {
   try {
@@ -72,9 +93,35 @@ function setup() {
       logToConsole("Background music started");
     }
     logToConsole("Game initialized");
+    setupTouchControls();
   } catch (e) {
     console.error('Error in setup:', e);
     logToConsole("Setup error occurred");
+  }
+}
+
+function setupTouchControls() {
+  try {
+    let attackButton = document.getElementById('attackButton');
+    let switchAttackButton = document.getElementById('switchAttackButton');
+    attackButton.addEventListener('touchstart', () => {
+      attackButtonPressed = true;
+      if (gameState === 'playing' && !player.attackActive && (unlimitedPowers || player.energy >= player.attacks[player.currentAttack])) {
+        player.attackActive = true;
+        player.attackFrame = 0;
+        if (attackSound) attackSound.play();
+        logToConsole(`${characterName} attacked with ${player.currentAttack}`);
+      }
+    });
+    attackButton.addEventListener('touchend', () => attackButtonPressed = false);
+    switchAttackButton.addEventListener('touchstart', () => {
+      currentAttackIndex = (currentAttackIndex + 1) % attackTypes.length;
+      player.currentAttack = attackTypes[currentAttackIndex];
+      logToConsole(`Selected ${player.currentAttack} attack`);
+    });
+  } catch (e) {
+    console.error('Error in setupTouchControls:', e);
+    logToConsole("Touch controls setup error");
   }
 }
 
@@ -90,6 +137,7 @@ function applySettings() {
       logToConsole(`Character name changed from ${oldName} to ${characterName}`);
     }
     document.getElementById('settings').classList.add('hidden');
+    document.getElementById('touchControls').classList.remove('hidden');
   } catch (e) {
     console.error('Error in applySettings:', e);
     logToConsole("Settings update error");
@@ -122,7 +170,9 @@ function resetGame() {
     showHelp = false;
     attackTimer = 0;
     consoleMessages = [];
+    currentAttackIndex = 0;
     document.getElementById('settings').classList.remove('hidden');
+    document.getElementById('touchControls').classList.add('hidden');
     spawnEnemies();
     logToConsole("Game reset");
   } catch (e) {
@@ -166,7 +216,7 @@ function spawnEnemies() {
 function draw() {
   try {
     if (bgImage) {
-      image(bgImage, 0, 0, width, height); // Full-screen background
+      image(bgImage, 0, 0, width, height);
     } else {
       background(50);
     }
@@ -180,16 +230,17 @@ function draw() {
       drawUI();
       if (showHelp) drawHelpScreen();
       drawConsole();
+      updateJoystick();
     } else if (gameState === 'gameover') {
       textSize(32);
       fill(255, 0, 0);
       textAlign(CENTER);
-      text('Game Over! Press R to Restart', width / 2, height / 2);
+      text('Game Over! Press R or Tap to Restart', width / 2, height / 2);
     } else if (gameState === 'win') {
       textSize(32);
       fill(0, 255, 0);
       textAlign(CENTER);
-      text('You Win! Press R to Restart', width / 2, height / 2);
+      text('You Win! Press R or Tap to Restart', width / 2, height / 2);
     }
   } catch (e) {
     console.error('Error in draw:', e);
@@ -215,7 +266,7 @@ function drawConsole() {
 function drawStartScreen() {
   try {
     fill(255);
-   rect(55, 100, 650, 400);
+    rect(55, 100, 650, 400);
     fill(0);
     textStyle(BOLD);
     textAlign(CENTER);
@@ -223,13 +274,13 @@ function drawStartScreen() {
     text(`${characterName}'s Rebellion`, width / 2, height / 2 - 100);
     textSize(20);
     text("Controls:", width / 2, height / 2 - 50);
-    text("Left/Right Arrows: Move", width / 2, height / 2 - 20);
-    text("Up Arrow: Jump", width / 2, height / 2 + 10);
-    text("Spacebar: Attack (uses energy)", width / 2, height / 2 + 40);
-    text("Select Attack Using 1-6 Keys", width / 2, height / 2 + 70);
+    text("Left/Right Arrows or Joystick: Move", width / 2, height / 2 - 20);
+    text("Up Arrow or Joystick Up: Jump", width / 2, height / 2 + 10);
+    text("Spacebar or Attack Button: Attack", width / 2, height / 2 + 40);
+    text("1-6 or Switch Button: Change Attack", width / 2, height / 2 + 70);
     text("H: Show/Hide Help", width / 2, height / 2 + 100);
-    text("R: Restart (on Game Over/Win)", width / 2, height / 2 + 130);
-    text("Press S to Start", width / 2, height / 2 + 160);
+    text("R or Tap: Restart (on Game Over/Win)", width / 2, height / 2 + 130);
+    text("Press S or Tap to Start", width / 2, height / 2 + 160);
   } catch (e) {
     console.error('Error in drawStartScreen:', e);
     logToConsole("Start screen error");
@@ -247,12 +298,12 @@ function drawHelpScreen() {
     textSize(24);
     text("Controls", width / 2, 150);
     textSize(18);
-    text("Left/Right Arrows: Move", width / 2, 200);
-    text("Up Arrow: Jump", width / 2, 230);
-    text("Spacebar: Attack (uses energy)", width / 2, 260);
-    text("1-6: Select Attack (Hand:10, Leg:15, Voice:20, Eye:25, Thunder:30, Missile:35)", width / 2, 290);
+    text("Left/Right Arrows or Joystick: Move", width / 2, 200);
+    text("Up Arrow or Joystick Up: Jump", width / 2, 230);
+    text("Spacebar or Attack Button: Attack", width / 2, 260);
+    text("1-6 or Switch Button: Change Attack (Hand:10, Leg:15, Voice:20, Eye:25, Thunder:30, Missile:35)", width / 2, 290);
     text("H: Show/Hide Help", width / 2, 320);
-    text("R: Restart (on Game Over/Win)", width / 2, 350);
+    text("R or Tap: Restart (on Game Over/Win)", width / 2, 350);
     text("Press H to Close", width / 2, 380);
   } catch (e) {
     console.error('Error in drawHelpScreen:', e);
@@ -262,19 +313,38 @@ function drawHelpScreen() {
 
 function updatePlayer() {
   try {
-    if (keyIsDown(LEFT_ARROW)) {
-      player.x -= player.speed;
-      logToConsole(`${characterName} moved left`);
-    }
-    if (keyIsDown(RIGHT_ARROW)) {
-      player.x += player.speed;
-      logToConsole(`${characterName} moved right`);
-    }
-    if (keyIsDown(UP_ARROW) && player.grounded) {
-      player.vy = player.jump;
-      player.grounded = false;
-      if (jumpSound) jumpSound.play();
-      logToConsole(`${characterName} jumped`);
+    if (joystick.active) {
+      let dx = joystick.x - joystick.baseX;
+      let dy = joystick.y - joystick.baseY;
+      let mag = Math.sqrt(dx * dx + dy * dy);
+      if (mag > 10) {
+        let angle = Math.atan2(dy, dx);
+        let moveSpeed = Math.min(mag / joystick.radius, 1) * player.speed;
+        player.x += Math.cos(angle) * moveSpeed;
+        if (Math.cos(angle) < -0.5) logToConsole(`${characterName} moved left`);
+        if (Math.cos(angle) > 0.5) logToConsole(`${characterName} moved right`);
+        if (Math.sin(angle) < -0.5 && player.grounded) {
+          player.vy = player.jump;
+          player.grounded = false;
+          if (jumpSound) jumpSound.play();
+          logToConsole(`${characterName} jumped`);
+        }
+      }
+    } else {
+      if (keyIsDown(LEFT_ARROW)) {
+        player.x -= player.speed;
+        logToConsole(`${characterName} moved left`);
+      }
+      if (keyIsDown(RIGHT_ARROW)) {
+        player.x += player.speed;
+        logToConsole(`${characterName} moved right`);
+      }
+      if (keyIsDown(UP_ARROW) && player.grounded) {
+        player.vy = player.jump;
+        player.grounded = false;
+        if (jumpSound) jumpSound.play();
+        logToConsole(`${characterName} jumped`);
+      }
     }
     player.vy += 0.5;
     player.y += player.vy;
@@ -293,7 +363,6 @@ function updatePlayer() {
       }
     }
 
-    // Update player missiles
     for (let i = player.missiles.length - 1; i >= 0; i--) {
       let m = player.missiles[i];
       m.x += m.speed;
@@ -302,7 +371,6 @@ function updatePlayer() {
       }
     }
 
-    // Draw player
     fill(255, 0, 0);
     rect(player.x, player.y - 5, player.w, 5, 2); // Hat
     fill(255);
@@ -320,10 +388,10 @@ function updatePlayer() {
     rect(player.x, player.y + 10, player.w, 5); // Shirt
     fill(255);
     if (player.attackActive && player.currentAttack === 'hand') {
-      ellipse(player.x + player.w + 24, player.y + 7, 24, 24); // Larger hand (was 12)
+      ellipse(player.x + player.w + 24, player.y + 7, 24, 24);
       ellipse(player.x - 3, player.y + 7, 3, 3);
     } else {
-      ellipse(player.x + player.w, player.y + 7, 24, 24); // Larger hand
+      ellipse(player.x + player.w, player.y + 7, 24, 24);
       ellipse(player.x, player.y + 7, 3, 3);
     }
     fill(139, 69, 19);
@@ -337,10 +405,10 @@ function updatePlayer() {
     if (player.attackActive) {
       if (player.currentAttack === 'voice') {
         fill(255, 255, 0, 150);
-        arc(player.x + player.w / 2, player.y + 8, 34, 20, 0, HALF_PI); // 2x voice range
+        arc(player.x + player.w / 2, player.y + 8, 34, 20, 0, HALF_PI);
       } else if (player.currentAttack === 'eye') {
         stroke(255, 0, 0);
-        line(player.x + 4, player.y + 4, player.x + 105, player.y + 4); // 5x laser range
+        line(player.x + 4, player.y + 4, player.x + 105, player.y + 4);
         line(player.x + 9, player.y + 4, player.x + 130, player.y + 4);
         noStroke();
       } else if (player.currentAttack === 'thunder') {
@@ -350,7 +418,6 @@ function updatePlayer() {
         player.missiles.push({ x: player.x + player.w, y: player.y, speed: 5, damage: 35 });
       }
     }
-    // Draw player missiles
     fill(255, 0, 0);
     for (let m of player.missiles) {
       rect(m.x, m.y, 10, 5);
@@ -406,38 +473,36 @@ function updateEnemies() {
             if (player.x < m.x) m.x -= m.speed;
             else if (player.x > m.x) m.x += m.speed;
           }
-          // Draw minion (humanoid for non-F16)
           if (m.type === 'f16') {
             fill(150);
             rect(m.x, m.y, m.w, m.h);
           } else {
             fill(m.type === 'zelensky' ? 0 : 100);
-            ellipse(m.x + m.w / 2, m.y - 5, 8, 8); // Head
-            rect(m.x, m.y, m.w, m.h - 5); // Body
+            ellipse(m.x + m.w / 2, m.y - 5, 8, 8);
+            rect(m.x, m.y, m.w, m.h - 5);
             fill(255);
-            ellipse(m.x + m.w, m.y + 5, 3, 3); // Right hand
-            ellipse(m.x, m.y + 5, 3, 3); // Left hand
+            ellipse(m.x + m.w, m.y + 5, 3, 3);
+            ellipse(m.x, m.y + 5, 3, 3);
             fill(100);
-            rect(m.x + 2, m.y + m.h - 5, 4, 5); // Left leg
-            rect(m.x + m.w - 6, m.y + m.h - 5, 4, 5); // Right leg
+            rect(m.x + 2, m.y + m.h - 5, 4, 5);
+            rect(m.x + m.w - 6, m.y + m.h - 5, 4, 5);
           }
         }
       }
 
-      // Draw enemy (humanoid for human/military/terrorist/boss)
       if (e.type === 'missile' || e.type === 'virus' || e.type === 'electric') {
         fill(e.type === 'virus' ? 0 : e.type === 'electric' ? 255 : 255);
         rect(e.x, e.y, e.w, e.h);
       } else {
         fill(e.type === 'human' ? 200 : e.type === 'military' ? 100 : e.type === 'terrorist' ? 150 : 100);
-        ellipse(e.x + e.w / 2, e.y - 5, 8, 8); // Head
-        rect(e.x, e.y, e.w, e.h - 5); // Body
+        ellipse(e.x + e.w / 2, e.y - 5, 8, 8);
+        rect(e.x, e.y, e.w, e.h - 5);
         fill(255);
-        ellipse(e.x + e.w, e.y + 5, 3, 3); // Right hand
-        ellipse(e.x, e.y + 5, 3, 3); // Left hand
+        ellipse(e.x + e.w, e.y + 5, 3, 3);
+        ellipse(e.x, e.y + 5, 3, 3);
         fill(100);
-        rect(e.x + 2, e.y + e.h - 5, 4, 5); // Left leg
-        rect(e.x + e.w - 6, e.y + e.h - 5, 4, 5); // Right leg
+        rect(e.x + 2, e.y + e.h - 5, 4, 5);
+        rect(e.x + e.w - 6, e.y + e.h - 5, 4, 5);
       }
     }
   } catch (e) {
@@ -462,7 +527,7 @@ function updateEnergyOrbs() {
 function handleCollisions() {
   try {
     if (player.attackActive) {
-      let attackRange = player.currentAttack === 'hand' ? 34 : 17; // 2x range for hand attack
+      let attackRange = player.currentAttack === 'hand' ? 34 : 17;
       for (let i = enemies.length - 1; i >= 0; i--) {
         let e = enemies[i];
         if (player.currentAttack === 'missile') {
@@ -531,7 +596,7 @@ function handleCollisions() {
         logToConsole(`${characterName} took ${e.damage} damage from ${e.type}`);
         if (player.health <= 0) {
           player.lives--;
-          logToConsole(`${characterName} lost a life, ${player.lives} lives remaining`);
+          logToConsole(`${characterName} lost a life, ${player.lives} remaining`);
           if (player.lives <= 0) {
             gameState = 'gameover';
             logToConsole("Game over");
@@ -553,7 +618,7 @@ function handleCollisions() {
           logToConsole(`${characterName} took ${m.damage} damage from boss minion ${m.type}`);
           if (player.health <= 0) {
             player.lives--;
-            logToConsole(`${characterName} lost a life, ${player.lives} lives remaining`);
+            logToConsole(`${characterName} lost a life, ${player.lives} remaining`);
             if (player.lives <= 0) {
               gameState = 'gameover';
               logToConsole("Game over");
@@ -606,7 +671,7 @@ function drawUI() {
     text(`Level: ${level}`, 10, 110);
     text(`Combo: ${combo}`, 10, 130);
     text(`Attack: ${player.currentAttack}`, 10, 150);
-    text('1:Hand 2:Leg 3:Voice 4:Eye 5:Thunder 6:Missile', 10, 170);
+    text('Switch: Change Attack', 10, 170);
     text('H: Help', 10, 190);
     if (boss) {
       fill(255, 0, 0);
@@ -632,26 +697,32 @@ function keyPressed() {
     }
     if (key === '1') {
       player.currentAttack = 'hand';
+      currentAttackIndex = 0;
       logToConsole("Selected hand attack");
     }
     if (key === '2') {
       player.currentAttack = 'leg';
+      currentAttackIndex = 1;
       logToConsole("Selected leg attack");
     }
     if (key === '3') {
       player.currentAttack = 'voice';
+      currentAttackIndex = 2;
       logToConsole("Selected voice attack");
     }
     if (key === '4') {
       player.currentAttack = 'eye';
+      currentAttackIndex = 3;
       logToConsole("Selected eye attack");
     }
     if (key === '5') {
       player.currentAttack = 'thunder';
+      currentAttackIndex = 4;
       logToConsole("Selected thunder attack");
     }
     if (key === '6') {
       player.currentAttack = 'missile';
+      currentAttackIndex = 5;
       logToConsole("Selected missile attack");
     }
     if (key === 'r' && (gameState === 'gameover' || gameState === 'win')) {
@@ -667,6 +738,93 @@ function keyPressed() {
   } catch (e) {
     console.error('Error in keyPressed:', e);
     logToConsole("Key press error");
+  }
+}
+
+function touchStarted() {
+  try {
+    if (gameState === 'start') {
+      gameState = 'playing';
+      logToConsole("Game started via touch");
+      return false;
+    }
+    if (gameState === 'gameover' || gameState === 'win') {
+      resetGame();
+      logToConsole("Game restarted via touch");
+      return false;
+    }
+    for (let touch of touches) {
+      let tx = touch.x;
+      let ty = touch.y;
+      if (dist(tx, ty, joystick.baseX, joystick.baseY) < joystick.radius) {
+        joystick.active = true;
+        joystick.x = tx;
+        joystick.y = ty;
+        updateJoystick();
+      }
+    }
+    return false;
+  } catch (e) {
+    console.error('Error in touchStarted:', e);
+    logToConsole("Touch start error");
+    return false;
+  }
+}
+
+function touchMoved() {
+  try {
+    for (let touch of touches) {
+      let tx = touch.x;
+      let ty = touch.y;
+      if (joystick.active && dist(tx, ty, joystick.baseX, joystick.baseY) < joystick.radius * 2) {
+        joystick.x = tx;
+        joystick.y = ty;
+        updateJoystick();
+      }
+    }
+    return false;
+  } catch (e) {
+    console.error('Error in touchMoved:', e);
+    logToConsole("Touch move error");
+    return false;
+  }
+}
+
+function touchEnded() {
+  try {
+    joystick.active = false;
+    updateJoystick();
+    return false;
+  } catch (e) {
+    console.error('Error in touchEnded:', e);
+    logToConsole("Touch end error");
+    return false;
+  }
+}
+
+function updateJoystick() {
+  try {
+    let handle = document.getElementById('joystickHandle');
+    if (joystick.active) {
+      let dx = joystick.x - joystick.baseX;
+      let dy = joystick.y - joystick.baseY;
+      let mag = Math.sqrt(dx * dx + dy * dy);
+      let angle = Math.atan2(dy, dx);
+      if (mag > joystick.radius) {
+        joystick.x = joystick.baseX + Math.cos(angle) * joystick.radius;
+        joystick.y = joystick.baseY + Math.sin(angle) * joystick.radius;
+      }
+      handle.style.left = (joystick.x - 20) + 'px';
+      handle.style.top = (joystick.y - 20) + 'px';
+    } else {
+      joystick.x = joystick.baseX;
+      joystick.y = joystick.baseY;
+      handle.style.left = (joystick.baseX - 20) + 'px';
+      handle.style.top = (joystick.baseY - 20) + 'px';
+    }
+  } catch (e) {
+    console.error('Error in updateJoystick:', e);
+    logToConsole("Joystick update error");
   }
 }
 
