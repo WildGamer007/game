@@ -83,9 +83,8 @@
       let instrDiv = createDiv('');
       instrDiv.class('instructions');
       instrDiv.html(`
-        <h2>Instructions</h2>
+        <b><h1>Instructions</h1></b>
         <p>PC: Use Left/Right arrow keys to move paddle</p>
-        <p>Mobile: Use Left/Right buttons to move paddle</p>
         <p>Hit bricks in alphabetical order (A to Z)</p>
         <p>Consecutive hits increase score multiplier</p>
         <p>Catch power-ups for bonuses</p>
@@ -101,7 +100,7 @@
       let formDiv = createDiv('');
       formDiv.class('settings-form');
       formDiv.html(`
-        <h2>Game Settings</h2>
+        <b><h2>Game Settings</h2></b>
         <label for="gameTime">Game Time (minutes):</label>
         <input type="number" id="gameTime" value="5" min="1" step="0.5">
         <label for="playerLives">Player Lives:</label>
@@ -141,9 +140,9 @@
     function initBricks() {
       bricks = [];
       let ranges = [
-        ['A', 'B', 'C', 'D', 'E', 'F'],
+        ['Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'],
         ['G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P'],
-        ['Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z']
+        ['A', 'B', 'C', 'D', 'E', 'F']
       ];
       for (let row = 0; row < brickRows; row++) {
         bricks[row] = [];
