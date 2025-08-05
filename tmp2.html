@@ -44,17 +44,17 @@
 
     function preload() {
       try {
-        hitSound = loadSound('bone-crack-1.mp3');
-        correctSound = loadSound('button-09a.mp3');
-        backgroundMusic = loadSound('war_bg_sound.mp3');
-        backgroundImages = [             // Placeholder: replace with actual image
-          loadImage('bg3.png'),
-          loadImage('bg4.png'),
-          loadImage('bg5.png'),
-          loadImage('bg6.png')
+        hitSound = loadSound('assets/bone-crack-1.mp3');
+        correctSound = loadSound('assets/button-09a.mp3');
+        backgroundMusic = loadSound('assets/war_bg_sound.mp3');
+        backgroundImages = [
+          loadImage('assets/bg3.png'),
+          loadImage('assets/bg4.png'),
+          loadImage('assets/bg5.png'),
+          loadImage('assets/bg6.png')
         ];
-        trophyImage = loadImage('trophy.png');
-        sadEmojiImage = loadImage('sad-emoji.png');
+        trophyImage = loadImage('assets/trophy.png');
+        sadEmojiImage = loadImage('assets/sad-emoji.png');
       } catch (e) {
         console.warn("Asset loading failed:", e.message);
         hitSound = { play: () => {} };
@@ -69,6 +69,7 @@
     function setup() {
       createCanvas(800, 600);
       paddle = createVector(width / 2 - 50, height - 20);
+      paddle.w = 100; // Initialize paddle width
       ball = { pos: createVector(width / 2, height - 40), vel: createVector(0, -ballSpeed), r: 10 };
       initBricks();
       if (musicPlaying) backgroundMusic.loop();
@@ -92,7 +93,6 @@
         <p>Press M or Music button to toggle music</p>
         <button id="startBtn">Start Game</button>
       `);
-      instrDiv.position(width / 2 - 300, height / 2 - 150);
       select('#startBtn').mousePressed(showSettingsForm);
     }
 
@@ -110,8 +110,17 @@
         <input type="text" id="ballColor" value="red">
         <button id="submitSettings">Submit</button>
       `);
-      formDiv.position(width / 2 - 300, height / 2 - 150);
       select('#submitSettings').mousePressed(startGame);
+      // Add Enter key support for form submission
+      select('#gameTime').elt.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') startGame();
+      });
+      select('#playerLives').elt.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') startGame();
+      });
+      select('#ballColor').elt.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') startGame();
+      });
     }
 
     function startGame() {
@@ -170,13 +179,18 @@
       }
 
       if (gameState === 'playing') {
-        // Update ball speed (increase every 30 seconds or 5 bricks)
+        // Paddle movement
+        if (keyIsDown(LEFT_ARROW)) paddle.x -= 5;
+        if (keyIsDown(RIGHT_ARROW)) paddle.x += 5;
+        paddle.x = constrain(paddle.x, 0, width - paddle.w);
+
+        // Update ball speed
         ballSpeed = 5 + Math.min(Math.floor(elapsedTime / 30000 + score / 5), 5);
         ball.vel.setMag(ballSpeed);
 
         // Draw paddle
         fill(0, 0, 255);
-        rect(paddle.x, paddle.y, 100, 10);
+        rect(paddle.x, paddle.y, paddle.w, 10);
 
         // Draw ball
         fill(ballColor);
@@ -201,7 +215,7 @@
           ellipse(p.x, p.y, 20);
           p.y += 3;
           if (p.y > height) powerUps.splice(i, 1);
-          if (p.y + 10 > paddle.y && p.x > paddle.x && p.x < paddle.x + 100) {
+          if (p.y + 10 > paddle.y && p.x > paddle.x && p.x < paddle.x + paddle.w) {
             if (p.type === 'largePaddle') paddle.w = 150;
             else if (p.type === 'fastBall') ballSpeed += 2;
             else if (p.type === 'extraLife') lives++;
@@ -225,7 +239,7 @@
         if (ball.pos.x - ball.r < 0 || ball.pos.x + ball.r > width) {
           ball.vel.x *= -1;
           hitSound.play();
-          multiplier = 1; // Reset multiplier on wall hit
+          multiplier = 1;
         }
         if (ball.pos.y - ball.r < 0) {
           ball.vel.y *= -1;
@@ -254,7 +268,6 @@
         }
 
         // Brick collision
-        let hitCorrectBrick = false;
         for (let row = 0; row < brickRows; row++) {
           for (let col = 0; col < brickCols; col++) {
             let brick = bricks[row][col];
@@ -266,8 +279,6 @@
                 multiplier++;
                 currentLetter = String.fromCharCode(currentLetter.charCodeAt(0) + 1);
                 correctSound.play();
-                hitCorrectBrick = true;
-                // Spawn particles
                 for (let i = 0; i < 10; i++) {
                   particles.push({
                     x: brick.x + brick.w / 2,
@@ -277,7 +288,6 @@
                     life: 20
                   });
                 }
-                // Spawn power-up (10% chance)
                 if (random() < 0.1) {
                   powerUps.push({
                     x: brick.x + brick.w / 2,
@@ -340,16 +350,18 @@
     function resetBall() {
       ball.pos.set(width / 2, height - 40);
       ball.vel.set(0, -ballSpeed);
-      paddle.w = 100; // Reset paddle size
+      paddle.w = 100;
     }
 
     function keyPressed() {
-      if (keyCode === ENTER && (gameState === 'instructions' || gameState === 'gameover' || gameState === 'win')) {
-        console.log("Enter pressed, starting game");
+      if (keyCode === ENTER && (gameState === 'instructions' || gameState === 'settings' || gameState === 'gameover' || gameState === 'win')) {
+        console.log("Enter pressed, handling state:", gameState);
         if (gameState === 'instructions') {
           select('.instructions').remove();
           showSettingsForm();
           gameState = 'settings';
+        } else if (gameState === 'settings') {
+          startGame();
         } else {
           if (gameState === 'win') timeLimit *= 0.8;
           startGame();
@@ -365,16 +377,10 @@
     }
 
     function touchStarted() {
-      if (gameState === 'instructions' || gameState === 'gameover' || gameState === 'win') {
-        console.log("Touch started, starting game");
-        if (gameState === 'instructions') {
-          select('.instructions').remove();
-          showSettingsForm();
-          gameState = 'settings';
-        } else {
-          if (gameState === 'win') timeLimit *= 0.8;
-          startGame();
-        }
+      if (gameState === 'gameover' || gameState === 'win') {
+        console.log("Touch started, restarting game");
+        if (gameState === 'win') timeLimit *= 0.8;
+        startGame();
       }
       return false;
     }
@@ -391,13 +397,6 @@
       console.log("Music toggled:", musicPlaying);
     }
 
-    // Paddle movement
-    function drawPaddleMovement() {
-      if (keyIsDown(LEFT_ARROW)) paddle.x -= 5;
-      if (keyIsDown(RIGHT_ARROW)) paddle.x += 5;
-      paddle.x = constrain(paddle.x, 0, width - paddle.w);
-    }
-
     // Mobile controls
     let leftBtn = document.getElementById('leftBtn');
     let rightBtn = document.getElementById('rightBtn');
@@ -410,12 +409,6 @@
     document.addEventListener('touchstart', (e) => {
       if (e.target.tagName !== 'BUTTON' && e.target.tagName !== 'INPUT') e.preventDefault();
     }, { passive: false });
-
-    // Call paddle movement in draw
-    function draw() {
-      if (gameState === 'playing') drawPaddleMovement();
-      // Rest of draw function (already defined above)
-    }
   </script>
 </body>
 </html>
