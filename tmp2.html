@@ -48,13 +48,13 @@
         correctSound = loadSound('assets/button-09a.mp3');
         backgroundMusic = loadSound('assets/war_bg_sound.mp3');
         backgroundImages = [
-          loadImage('assets/bg3.png'),
-          loadImage('assets/bg4.png'),
-          loadImage('assets/bg5.png'),
-          loadImage('assets/bg6.png')
+          loadImage('bg3.png'),
+          loadImage('bg4.png'),
+          loadImage('bg5.png'),
+          loadImage('bg6.png')
         ];
-        trophyImage = loadImage('assets/trophy.png');
-        sadEmojiImage = loadImage('assets/sad-emoji.png');
+        trophyImage = loadImage('trophy.png');
+        sadEmojiImage = loadImage('sad-emoji.png');
       } catch (e) {
         console.warn("Asset loading failed:", e.message);
         hitSound = { play: () => {} };
