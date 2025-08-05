@@ -362,7 +362,7 @@
         } else if (gameState === 'settings') {
           startGame();
         } else {
-          if (gameState === 'win') timeLimit *= 0.8;
+          if (gameState === 'win' || gameState === 'gameover') timeLimit *= 0.8;
           startGame();
         }
       }
