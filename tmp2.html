@@ -15,10 +15,12 @@
       .mobile-controls { display: flex; }
     }
     button { padding: 10px; font-size: 16px; cursor: pointer; }
-    .instructions { text-align: center; background: rgba(255, 255, 255, 0.8); padding: 20px; border-radius: 10px; max-width: 600px; }
-    .instructions h2 { margin: 0 0 10px; }
-    .instructions p { margin: 5px 0; }
-    .game-over, .win-screen { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; background: rgba(255, 255, 255, 0.8); padding: 20px; border-radius: 10px; }
+    .instructions, .settings-form { text-align: center; background: white; padding: 20px; border-radius: 10px; max-width: 600px; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); }
+    .instructions h2, .settings-form h2 { margin: 0 0 10px; font-weight: bold; color: black; }
+    .instructions p { margin: 5px 0; font-weight: bold; color: black; }
+    .settings-form label { display: block; margin: 10px 0 5px; font-weight: bold; color: black; }
+    .settings-form input { padding: 5px; font-size: 16px; width: 200px; }
+    .game-over, .win-screen { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; background: white; padding: 20px; border-radius: 10px; }
     .game-over img, .win-screen img { max-width: 100px; }
   </style>
 </head>
@@ -32,29 +34,27 @@
   <script>
     let paddle, ball, bricks = [];
     let lives = 3, timeLimit = 5 * 60 * 1000, ballColor = 'red';
-    let gameState = 'instructions', currentLetter = 'A', score = 0;
+    let gameState = 'instructions', currentLetter = 'A', score = 0, multiplier = 1;
     let hitSound, correctSound, backgroundMusic;
     let backgroundImages = [], currentBackground;
     let trophyImage, sadEmojiImage;
     let startTime, elapsedTime = 0, isPaused = false, musicPlaying = true;
-    const brickRows = 5, brickCols = 10;
+    let powerUps = [], particles = [], ballSpeed = 5, highScore = localStorage.getItem('highScore') || 0;
+    const brickRows = 3, brickCols = 10;
 
     function preload() {
       try {
-        // Replace with local or reliable URLs for audio and images
         hitSound = loadSound('bone-crack-1.mp3');
         correctSound = loadSound('button-09a.mp3');
         backgroundMusic = loadSound('war_bg_sound.mp3');
         backgroundImages = [
-          loadImage('bg1.png'), // Placeholder: replace with actual image
-          loadImage('bg2.png'),
           loadImage('bg3.png'),
           loadImage('bg4.png'),
           loadImage('bg5.png'),
           loadImage('bg6.png')
         ];
-        trophyImage = loadImage('trophy.png');
-        sadEmojiImage = loadImage('sad-emoji.png');
+        trophyImage = loadImage('assets/trophy.png');
+        sadEmojiImage = loadImage('assets/sad-emoji.png');
       } catch (e) {
         console.warn("Asset loading failed:", e.message);
         hitSound = { play: () => {} };
@@ -69,77 +69,97 @@
     function setup() {
       createCanvas(800, 600);
       paddle = createVector(width / 2 - 50, height - 20);
-      ball = { pos: createVector(width / 2, height - 40), vel: createVector(0, -5), r: 10 };
+      ball = { pos: createVector(width / 2, height - 40), vel: createVector(0, -ballSpeed), r: 10 };
       initBricks();
       if (musicPlaying) backgroundMusic.loop();
       textAlign(CENTER, CENTER);
       textSize(20);
-      // Randomly select background
       currentBackground = backgroundImages.length > 0 ? random(backgroundImages) : null;
-      // Create start button
-      let startBtn = createButton('Start Game');
-      startBtn.position(width / 2 - 50, height / 2 + 100);
-      startBtn.mousePressed(startGame);
-      startBtn.addClass('start-btn');
+      showInstructions();
+    }
+
+    function showInstructions() {
+      let instrDiv = createDiv('');
+      instrDiv.class('instructions');
+      instrDiv.html(`
+        <h2>Instructions</h2>
+        <p>PC: Use Left/Right arrow keys to move paddle</p>
+        <p>Mobile: Use Left/Right buttons to move paddle</p>
+        <p>Hit bricks in alphabetical order (A to Z)</p>
+        <p>Consecutive hits increase score multiplier</p>
+        <p>Catch power-ups for bonuses</p>
+        <p>Press P or Pause button to pause</p>
+        <p>Press M or Music button to toggle music</p>
+        <button id="startBtn">Start Game</button>
+      `);
+      instrDiv.position(width / 2 - 300, height / 2 - 150);
+      select('#startBtn').mousePressed(showSettingsForm);
+    }
+
+    function showSettingsForm() {
+      select('.instructions').remove();
+      let formDiv = createDiv('');
+      formDiv.class('settings-form');
+      formDiv.html(`
+        <h2>Game Settings</h2>
+        <label for="gameTime">Game Time (minutes):</label>
+        <input type="number" id="gameTime" value="5" min="1" step="0.5">
+        <label for="playerLives">Player Lives:</label>
+        <input type="number" id="playerLives" value="3" min="1">
+        <label for="ballColor">Ball Color:</label>
+        <input type="text" id="ballColor" value="red">
+        <button id="submitSettings">Submit</button>
+      `);
+      formDiv.position(width / 2 - 300, height / 2 - 150);
+      select('#submitSettings').mousePressed(startGame);
     }
 
     function startGame() {
-      promptSettings();
-      gameState = 'playing';
-      select('.start-btn').remove(); // Remove start button
-    }
-
-    function promptSettings() {
-      let time = prompt("Enter time limit in minutes (default 5):", "5");
-      let livesInput = prompt("Enter number of lives (default 3):", "3");
-      let color = prompt("Enter ball color (default red):", "red");
-      timeLimit = (parseFloat(time) || 5) * 60 * 1000;
-      lives = parseInt(livesInput) || 3;
-      ballColor = color || 'red';
+      timeLimit = (parseFloat(select('#gameTime').value()) || 5) * 60 * 1000;
+      lives = parseInt(select('#playerLives').value()) || 3;
+      ballColor = select('#ballColor').value() || 'red';
       if (timeLimit < 0) timeLimit = 5 * 60 * 1000;
       if (lives < 1) lives = 3;
       console.log("Settings:", { timeLimit, lives, ballColor });
+      select('.settings-form').remove();
+      gameState = 'playing';
       startTime = millis();
+      initBricks();
+      resetBall();
+      currentBackground = backgroundImages.length > 0 ? random(backgroundImages) : null;
     }
 
     function initBricks() {
-      let letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').sort(() => Math.random() - 0.5);
-      let letterIndex = 0;
+      bricks = [];
+      let ranges = [
+        ['A', 'B', 'C', 'D', 'E', 'F'],
+        ['G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P'],
+        ['Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z']
+      ];
       for (let row = 0; row < brickRows; row++) {
         bricks[row] = [];
-        for (let col = 0; col < brickCols; col++) {
-          if (letterIndex < 26) {
-            bricks[row][col] = {
-              x: col * (width / brickCols) + 10,
-              y: row * 30 + 50,
-              w: width / brickCols - 20,
-              h: 20,
-              letter: letters[letterIndex++],
-              color: color(random(255), random(255), random(255))
-            };
-          }
+        let letters = ranges[row].sort(() => Math.random() - 0.5);
+        for (let col = 0; col < brickCols && col < letters.length; col++) {
+          bricks[row][col] = {
+            x: col * (width / brickCols) + 10,
+            y: row * 30 + 50,
+            w: width / brickCols - 20,
+            h: 20,
+            letter: letters[col],
+            color: color(random(255), random(255), random(255))
+          };
         }
       }
     }
 
     function draw() {
-      // Draw background
       if (currentBackground) {
         image(currentBackground, 0, 0, width, height);
       } else {
         background(220);
       }
 
-      if (gameState === 'instructions') {
-        fill(0);
-        textSize(24);
-        text("Instructions", width / 2, height / 2 - 100);
-        textSize(18);
-        text("PC: Use Left/Right arrow keys to move paddle", width / 2, height / 2 - 50);
-        text("Mobile: Use Left/Right buttons to move paddle", width / 2, height / 2 - 20);
-        text("Hit bricks in alphabetical order (A to Z)", width / 2, height / 2 + 10);
-        text("Press P or Pause button to pause", width / 2, height / 2 + 40);
-        text("Press M or Music button to toggle music", width / 2, height / 2 + 70);
+      if (gameState === 'instructions' || gameState === 'settings') {
         return;
       }
 
@@ -150,11 +170,9 @@
       }
 
       if (gameState === 'playing') {
-        // Update elapsed time
-        elapsedTime = millis() - startTime;
-        if (elapsedTime > timeLimit) {
-          gameState = 'gameover';
-        }
+        // Update ball speed (increase every 30 seconds or 5 bricks)
+        ballSpeed = 5 + Math.min(Math.floor(elapsedTime / 30000 + score / 5), 5);
+        ball.vel.setMag(ballSpeed);
 
         // Draw paddle
         fill(0, 0, 255);
@@ -176,30 +194,67 @@
           }
         }
 
+        // Draw power-ups
+        for (let i = powerUps.length - 1; i >= 0; i--) {
+          let p = powerUps[i];
+          fill(p.type === 'largePaddle' ? 'green' : p.type === 'fastBall' ? 'red' : 'yellow');
+          ellipse(p.x, p.y, 20);
+          p.y += 3;
+          if (p.y > height) powerUps.splice(i, 1);
+          if (p.y + 10 > paddle.y && p.x > paddle.x && p.x < paddle.x + 100) {
+            if (p.type === 'largePaddle') paddle.w = 150;
+            else if (p.type === 'fastBall') ballSpeed += 2;
+            else if (p.type === 'extraLife') lives++;
+            powerUps.splice(i, 1);
+          }
+        }
+
+        // Draw particles
+        for (let i = particles.length - 1; i >= 0; i--) {
+          let p = particles[i];
+          fill(255, 255, 0);
+          ellipse(p.x, p.y, 5);
+          p.x += p.vx;
+          p.y += p.vy;
+          p.life--;
+          if (p.life <= 0) particles.splice(i, 1);
+        }
+
         // Update ball
         ball.pos.add(ball.vel);
         if (ball.pos.x - ball.r < 0 || ball.pos.x + ball.r > width) {
           ball.vel.x *= -1;
           hitSound.play();
+          multiplier = 1; // Reset multiplier on wall hit
         }
         if (ball.pos.y - ball.r < 0) {
           ball.vel.y *= -1;
           hitSound.play();
+          multiplier = 1;
         }
         if (ball.pos.y + ball.r > height) {
           lives--;
-          if (lives <= 0) gameState = 'gameover';
-          else resetBall();
+          if (lives <= 0) {
+            gameState = 'gameover';
+            if (score * multiplier > highScore) {
+              highScore = score * multiplier;
+              localStorage.setItem('highScore', highScore);
+            }
+          } else {
+            resetBall();
+          }
         }
 
         // Paddle collision
-        if (ball.pos.y + ball.r > paddle.y && ball.pos.x > paddle.x && ball.pos.x < paddle.x + 100) {
-          let hitPos = (ball.pos.x - paddle.x) / 100;
-          ball.vel.set(10 * (hitPos - 0.5), -ball.vel.y);
+        if (ball.pos.y + ball.r > paddle.y && ball.pos.x > paddle.x && ball.pos.x < paddle.x + paddle.w) {
+          let hitPos = (ball.pos.x - paddle.x) / paddle.w;
+          ball.vel.set(10 * (hitPos - 0.5), -ballSpeed);
           hitSound.play();
+          multiplier = 1;
         }
 
         // Brick collision
+        let hitCorrectBrick = false;
         for (let row = 0; row < brickRows; row++) {
           for (let col = 0; col < brickCols; col++) {
             let brick = bricks[row][col];
@@ -207,108 +262,6 @@
                 ball.pos.x > brick.x && ball.pos.x < brick.x + brick.w) {
               if (brick.letter === currentLetter) {
                 bricks[row][col] = null;
-                score++;
-                currentLetter = String.fromCharCode(currentLetter.charCodeAt(0) + 1);
-                correctSound.play();
-                ball.vel.y *= -1;
-                if (score === 26) gameState = 'win';
-              } else {
-                hitSound.play();
-                ball.vel.y *= -1;
-              }
-            }
-          }
-        }
-
-        // Draw UI
-        fill(0);
-        text(`Lives: ${lives} | Time: ${Math.floor((timeLimit - elapsedTime) / 1000)}s | Letter: ${currentLetter}`, width / 2, 20);
-
-        // Paddle movement
-        if (keyIsDown(LEFT_ARROW)) paddle.x -= 5;
-        if (keyIsDown(RIGHT_ARROW)) paddle.x += 5;
-        paddle.x = constrain(paddle.x, 0, width - 100);
-      }
-
-      if (gameState === 'gameover') {
-        fill(0);
-        if (sadEmojiImage) {
-          image(sadEmojiImage, width / 2 - 50, height / 2 - 100, 100, 100);
-        }
-        text("Game Over! Try Again?", width / 2, height / 2 + 50);
-        text("Press Enter or Tap to Restart", width / 2, height / 2 + 80);
-      } else if (gameState === 'win') {
-        fill(0);
-        if (trophyImage) {
-          image(trophyImage, width / 2 - 50, height / 2 - 100, 100, 100);
-        }
-        text("Congratulations! You Win!", width / 2, height / 2 + 50);
-        text(`Retry with ${Math.floor(timeLimit / 1000 / 60 * 0.8)} minutes?`, width / 2, height / 2 + 80);
-        text("Press Enter or Tap to Restart", width / 2, height / 2 + 110);
-      }
-    }
-
-    function resetBall() {
-      ball.pos.set(width / 2, height - 40);
-      ball.vel.set(0, -5);
-    }
-
-    function keyPressed() {
-      if (keyCode === ENTER && (gameState === 'instructions' || gameState === 'gameover' || gameState === 'win')) {
-        console.log("Enter pressed, starting game");
-        gameState = 'playing';
-        if (gameState === 'win') timeLimit *= 0.8; // Reduce time by 20% on retry
-        promptSettings();
-        initBricks();
-        resetBall();
-        currentBackground = backgroundImages.length > 0 ? random(backgroundImages) : null;
-      }
-      if (key === 'p' || key === 'P') {
-        isPaused = !isPaused;
-        console.log("Paused:", isPaused);
-      }
-      if (key === 'm' || key === 'M') {
-        toggleMusic();
-      }
-    }
-
-    function touchStarted() {
-      if (gameState === 'instructions' || gameState === 'gameover' || gameState === 'win') {
-        console.log("Touch started, starting game");
-        gameState = 'playing';
-        if (gameState === 'win') timeLimit *= 0.8; // Reduce time by 20% on retry
-        promptSettings();
-        initBricks();
-        resetBall();
-        currentBackground = backgroundImages.length > 0 ? random(backgroundImages) : null;
-      }
-      return false;
-    }
-
-    function toggleMusic() {
-      musicPlaying = !musicPlaying;
-      if (musicPlaying) {
-        backgroundMusic.loop();
-        document.getElementById('musicBtn').textContent = 'Music: On';
-      } else {
-        backgroundMusic.stop();
-        document.getElementById('musicBtn').textContent = 'Music: Off';
-      }
-      console.log("Music toggled:", musicPlaying);
-    }
-
-    // Mobile controls
-    let leftBtn = document.getElementById('leftBtn');
-    let rightBtn = document.getElementById('rightBtn');
-    if (leftBtn) leftBtn.addEventListener('touchstart', (e) => { paddle.x -= 10; e.preventDefault(); });
-    if (rightBtn) rightBtn.addEventListener('touchstart', (e) => { paddle.x += 10; e.preventDefault(); });
-    document.getElementById('pauseBtn')?.addEventListener('touchstart', (e) => { isPaused = !isPaused; e.preventDefault(); console.log("Paused:", isPaused); });
-    document.getElementById('musicBtn')?.addEventListener('touchstart', (e) => { toggleMusic(); e.preventDefault(); });
-
-    // Prevent default touch behavior on canvas
-    document.addEventListener('touchstart', (e) => {
-      if (e.target.tagName !== 'BUTTON') e.preventDefault();
-    }, { passive: false });
-  </script>
-</body>
-</html>
+                score += multiplier;
+                multiplier++;
+                currentLetter = String.fromCharCode(currentLetter.charCode
