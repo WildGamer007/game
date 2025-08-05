@@ -352,21 +352,27 @@
       paddle.w = 100;
     }
 
-    function keyPressed() {
-      if (keyCode === ENTER && (gameState === 'instructions' || gameState === 'settings' || gameState === 'gameover' || gameState === 'win')) {
-        console.log("Enter pressed, handling state:", gameState);
-        if (gameState === 'instructions') {
-          select('.instructions').remove();
-          showSettingsForm();
-          gameState = 'settings';
-        } else if (gameState === 'settings') {
-          startGame();
-        } else {
-          if (gameState === 'win' || gameState === 'gameover') timeLimit *= 0.8;
-          startGame();
-        }
-      }
-      if (key === 'p' || key === 'P') {
+function keyPressed() {
+  if (keyCode === ENTER && gameState === 'gameover') {
+    console.log("Enter pressed, restarting game");
+    startGame();
+  }
+  if (keyCode === ENTER && gameState === 'win') {
+    console.log("Enter pressed, restarting game with reduced time");
+    timeLimit *= 0.8;
+    startGame();
+  }
+  if (keyCode === ENTER && (gameState === 'instructions' || gameState === 'settings')) {
+    console.log("Enter pressed, handling state:", gameState);
+    if (gameState === 'instructions') {
+      select('.instructions').remove();
+      showSettingsForm();
+      gameState = 'settings';
+    } else if (gameState === 'settings') {
+      startGame();
+    }
+  }
+  if (key === 'p' || key === 'P') {
         isPaused = !isPaused;
         console.log("Paused:", isPaused);
       }
