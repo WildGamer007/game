@@ -69,7 +69,7 @@
     function setup() {
       createCanvas(800, 600);
       paddle = createVector(width / 2 - 50, height - 20);
-      paddle.w = 100; // Initialize paddle width
+      paddle.w = 100;
       ball = { pos: createVector(width / 2, height - 40), vel: createVector(0, -ballSpeed), r: 10 };
       initBricks();
       if (musicPlaying) backgroundMusic.loop();
@@ -80,11 +80,13 @@
     }
 
     function showInstructions() {
+      console.log("Showing instructions");
       let instrDiv = createDiv('');
       instrDiv.class('instructions');
       instrDiv.html(`
-        <b><h1>Instructions</h1></b>
+        <h2>Instructions</h2>
         <p>PC: Use Left/Right arrow keys to move paddle</p>
+        <p>Mobile: Use Left/Right buttons to move paddle</p>
         <p>Hit bricks in alphabetical order (A to Z)</p>
         <p>Consecutive hits increase score multiplier</p>
         <p>Catch power-ups for bonuses</p>
@@ -92,15 +94,19 @@
         <p>Press M or Music button to toggle music</p>
         <button id="startBtn">Start Game</button>
       `);
-      select('#startBtn').mousePressed(showSettingsForm);
+      select('#startBtn').mousePressed(() => {
+        console.log("Start button clicked");
+        showSettingsForm();
+      });
     }
 
     function showSettingsForm() {
       select('.instructions').remove();
+      console.log("Showing settings form");
       let formDiv = createDiv('');
       formDiv.class('settings-form');
       formDiv.html(`
-        <b><h2>Game Settings</h2></b>
+        <h2>Game Settings</h2>
         <label for="gameTime">Game Time (minutes):</label>
         <input type="number" id="gameTime" value="5" min="1" step="0.5">
         <label for="playerLives">Player Lives:</label>
@@ -109,29 +115,35 @@
         <input type="text" id="ballColor" value="red">
         <button id="submitSettings">Submit</button>
       `);
-      select('#submitSettings').mousePressed(startGame);
-      // Add Enter key support for form submission
-      select('#gameTime').elt.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') startGame();
-      });
-      select('#playerLives').elt.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') startGame();
-      });
-      select('#ballColor').elt.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') startGame();
+      select('#submitSettings').mousePressed(() => {
+        console.log("Submit button clicked");
+        startGame();
       });
     }
 
     function startGame() {
-      timeLimit = (parseFloat(select('#gameTime').value()) || 5) * 60 * 1000;
-      lives = parseInt(select('#playerLives').value()) || 3;
-      ballColor = select('#ballColor').value() || 'red';
+      console.log("startGame called, current gameState:", gameState);
+      let gameTimeInput = select('#gameTime');
+      let playerLivesInput = select('#playerLives');
+      let ballColorInput = select('#ballColor');
+      if (!gameTimeInput || !playerLivesInput || !ballColorInput) {
+        console.error("Form inputs not found, re-showing settings form");
+        showSettingsForm();
+        gameState = 'settings';
+        return;
+      }
+      timeLimit = (parseFloat(gameTimeInput.value()) || 5) * 60 * 1000;
+      lives = parseInt(playerLivesInput.value()) || 3;
+      ballColor = ballColorInput.value() || 'red';
       if (timeLimit < 0) timeLimit = 5 * 60 * 1000;
       if (lives < 1) lives = 3;
       console.log("Settings:", { timeLimit, lives, ballColor });
       select('.settings-form').remove();
       gameState = 'playing';
       startTime = millis();
+      score = 0;
+      multiplier = 1;
+      currentLetter = 'A';
       initBricks();
       resetBall();
       currentBackground = backgroundImages.length > 0 ? random(backgroundImages) : null;
@@ -352,27 +364,24 @@
       paddle.w = 100;
     }
 
-function keyPressed() {
-  if (keyCode === ENTER && gameState === 'gameover') {
-    console.log("Enter pressed, restarting game");
-    startGame();
-  }
-  if (keyCode === ENTER && gameState === 'win') {
-    console.log("Enter pressed, restarting game with reduced time");
-    timeLimit *= 0.8;
-    startGame();
-  }
-  if (keyCode === ENTER && (gameState === 'instructions' || gameState === 'settings')) {
-    console.log("Enter pressed, handling state:", gameState);
-    if (gameState === 'instructions') {
-      select('.instructions').remove();
-      showSettingsForm();
-      gameState = 'settings';
-    } else if (gameState === 'settings') {
-      startGame();
-    }
-  }
-  if (key === 'p' || key === 'P') {
+    function keyPressed() {
+      if (keyCode === ENTER && (gameState === 'instructions' || gameState === 'settings' || gameState === 'gameover' || gameState === 'win')) {
+        console.log("Enter pressed, handling state:", gameState);
+        if (gameState === 'instructions') {
+          select('.instructions').remove();
+          showSettingsForm();
+          gameState = 'settings';
+        } else if (gameState === 'settings') {
+          startGame();
+        } else if (gameState === 'gameover' || gameState === 'win') {
+          if (gameState === 'win') timeLimit *= 0.8;
+          select('.game-over')?.remove();
+          select('.win-screen')?.remove();
+          showSettingsForm();
+          gameState = 'settings';
+        }
+      }
+      if (key === 'p' || key === 'P') {
         isPaused = !isPaused;
         console.log("Paused:", isPaused);
       }
@@ -385,7 +394,10 @@ function keyPressed() {
       if (gameState === 'gameover' || gameState === 'win') {
         console.log("Touch started, restarting game");
         if (gameState === 'win') timeLimit *= 0.8;
-        startGame();
+        select('.game-over')?.remove();
+        select('.win-screen')?.remove();
+        showSettingsForm();
+        gameState = 'settings';
       }
       return false;
     }
