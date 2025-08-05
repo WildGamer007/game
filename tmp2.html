@@ -4,16 +4,22 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Alphabet Breakout</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.2/p5.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.2/addons/p5.sound.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/addons/p5.sound.min.js"></script>
   <style>
-    body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background: #f0f0f0; }
-    canvas { display: block; }
+    body { margin: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; background: #f0f0f0; }
+    canvas { display: block; touch-action: none; }
     .controls { position: absolute; bottom: 10px; display: flex; gap: 10px; }
     .mobile-controls { display: none; }
     @media (max-width: 600px) {
       .mobile-controls { display: flex; }
     }
+    button { padding: 10px; font-size: 16px; cursor: pointer; }
+    .instructions { text-align: center; background: rgba(255, 255, 255, 0.8); padding: 20px; border-radius: 10px; max-width: 600px; }
+    .instructions h2 { margin: 0 0 10px; }
+    .instructions p { margin: 5px 0; }
+    .game-over, .win-screen { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; background: rgba(255, 255, 255, 0.8); padding: 20px; border-radius: 10px; }
+    .game-over img, .win-screen img { max-width: 100px; }
   </style>
 </head>
 <body>
@@ -26,15 +32,39 @@
   <script>
     let paddle, ball, bricks = [];
     let lives = 3, timeLimit = 5 * 60 * 1000, ballColor = 'red';
-    let gameState = 'setup', currentLetter = 'A', score = 0;
+    let gameState = 'instructions', currentLetter = 'A', score = 0;
     let hitSound, correctSound, backgroundMusic;
+    let backgroundImages = [], currentBackground;
+    let trophyImage, sadEmojiImage;
     let startTime, elapsedTime = 0, isPaused = false, musicPlaying = true;
     const brickRows = 5, brickCols = 10;
 
     function preload() {
-      hitSound = loadSound('bone-crack-1.mp3');
-      correctSound = loadSound('button-09a.mp3');
-      backgroundMusic = loadSound('war_bg_sound.mp3');
+      try {
+        // Replace with local or reliable URLs for audio and images
+        hitSound = loadSound('bone-crack-1.mp3');
+        correctSound = loadSound('button-09a.mp3');
+        backgroundMusic = loadSound('war_bg_sound.mp3');
+        backgroundImages = [
+          loadImage('bg1.png'), // Placeholder: replace with actual image
+          loadImage('bg2.png'),
+          loadImage('bg3.png'),
+          loadImage('bg4.png'),
+          loadImage('bg5.png'),
+          loadImage('bg6.png'),
+          loadImage('bg7.png')
+        ];
+        trophyImage = loadImage('trophy.png');
+        sadEmojiImage = loadImage('sad-emoji.png');
+      } catch (e) {
+        console.warn("Asset loading failed:", e.message);
+        hitSound = { play: () => {} };
+        correctSound = { play: () => {} };
+        backgroundMusic = { loop: () => {}, stop: () => {} };
+        backgroundImages = [];
+        trophyImage = null;
+        sadEmojiImage = null;
+      }
     }
 
     function setup() {
@@ -42,10 +72,22 @@
       paddle = createVector(width / 2 - 50, height - 20);
       ball = { pos: createVector(width / 2, height - 40), vel: createVector(0, -5), r: 10 };
       initBricks();
-      backgroundMusic.loop();
+      if (musicPlaying) backgroundMusic.loop();
       textAlign(CENTER, CENTER);
       textSize(20);
+      // Randomly select background
+      currentBackground = backgroundImages.length > 0 ? random(backgroundImages) : null;
+      // Create start button
+      let startBtn = createButton('Start Game');
+      startBtn.position(width / 2 - 50, height / 2 + 100);
+      startBtn.mousePressed(startGame);
+      startBtn.addClass('start-btn');
+    }
+
+    function startGame() {
       promptSettings();
+      gameState = 'playing';
+      select('.start-btn').remove(); // Remove start button
     }
 
     function promptSettings() {
@@ -55,6 +97,9 @@
       timeLimit = (parseFloat(time) || 5) * 60 * 1000;
       lives = parseInt(livesInput) || 3;
       ballColor = color || 'red';
+      if (timeLimit < 0) timeLimit = 5 * 60 * 1000;
+      if (lives < 1) lives = 3;
+      console.log("Settings:", { timeLimit, lives, ballColor });
       startTime = millis();
     }
 
@@ -79,94 +124,128 @@
     }
 
     function draw() {
-      background(220);
-      if (gameState === 'setup') {
-        text("Press Enter to Start", width / 2, height / 2);
+      // Draw background
+      if (currentBackground) {
+        image(currentBackground, 0, 0, width, height);
+      } else {
+        background(220);
+      }
+
+      if (gameState === 'instructions') {
+        fill(0);
+        textSize(24);
+        text("Instructions", width / 2, height / 2 - 100);
+        textSize(18);
+        text("PC: Use Left/Right arrow keys to move paddle", width / 2, height / 2 - 50);
+        text("Mobile: Use Left/Right buttons to move paddle", width / 2, height / 2 - 20);
+        text("Hit bricks in alphabetical order (A to Z)", width / 2, height / 2 + 10);
+        text("Press P or Pause button to pause", width / 2, height / 2 + 40);
+        text("Press M or Music button to toggle music", width / 2, height / 2 + 70);
         return;
       }
+
       if (isPaused) {
+        fill(0);
         text("Paused", width / 2, height / 2);
         return;
       }
 
-      // Update elapsed time
-      elapsedTime = millis() - startTime;
-      if (elapsedTime > timeLimit) {
-        gameState = 'gameover';
-      }
-
-      // Draw paddle
-      fill(0, 0, 255);
-      rect(paddle.x, paddle.y, 100, 10);
-
-      // Draw ball
-      fill(ballColor);
-      ellipse(ball.pos.x, ball.pos.y, ball.r * 2);
-
-      // Draw bricks
-      for (let row of bricks) {
-        for (let brick of row) {
-          if (brick) {
-            fill(brick.color);
-            rect(brick.x, brick.y, brick.w, brick.h);
-            fill(255);
-            text(brick.letter, brick.x + brick.w / 2, brick.y + brick.h / 2);
-          }
+      if (gameState === 'playing') {
+        // Update elapsed time
+        elapsedTime = millis() - startTime;
+        if (elapsedTime > timeLimit) {
+          gameState = 'gameover';
         }
-      }
 
-      // Update ball
-      ball.pos.add(ball.vel);
-      if (ball.pos.x - ball.r < 0 || ball.pos.x + ball.r > width) {
-        ball.vel.x *= -1;
-        hitSound.play();
-      }
-      if (ball.pos.y - ball.r < 0) {
-        ball.vel.y *= -1;
-        hitSound.play();
-      }
-      if (ball.pos.y + ball.r > height) {
-        lives--;
-        if (lives <= 0) gameState = 'gameover';
-        else resetBall();
-      }
+        // Draw paddle
+        fill(0, 0, 255);
+        rect(paddle.x, paddle.y, 100, 10);
 
-      // Paddle collision
-      if (ball.pos.y + ball.r > paddle.y && ball.pos.x > paddle.x && ball.pos.x < paddle.x + 100) {
-        let hitPos = (ball.pos.x - paddle.x) / 100;
-        ball.vel.set(10 * (hitPos - 0.5), -ball.vel.y);
-        hitSound.play();
-      }
+        // Draw ball
+        fill(ballColor);
+        ellipse(ball.pos.x, ball.pos.y, ball.r * 2);
 
-      // Brick collision
-      for (let row = 0; row < brickRows; row++) {
-        for (let col = 0; col < brickCols; col++) {
-          let brick = bricks[row][col];
-          if (brick && ball.pos.y - ball.r < brick.y + brick.h && ball.pos.y + ball.r > brick.y &&
-              ball.pos.x > brick.x && ball.pos.x < brick.x + brick.w) {
-            if (brick.letter === currentLetter) {
-              bricks[row][col] = null;
-              score++;
-              currentLetter = String.fromCharCode(currentLetter.charCodeAt(0) + 1);
-              correctSound.play();
-              ball.vel.y *= -1;
-              if (score === 26) gameState = 'win';
-            } else {
-              hitSound.play();
-              ball.vel.y *= -1;
+        // Draw bricks
+        for (let row of bricks) {
+          for (let brick of row) {
+            if (brick) {
+              fill(brick.color);
+              rect(brick.x, brick.y, brick.w, brick.h);
+              fill(255);
+              text(brick.letter, brick.x + brick.w / 2, brick.y + brick.h / 2);
             }
           }
         }
+
+        // Update ball
+        ball.pos.add(ball.vel);
+        if (ball.pos.x - ball.r < 0 || ball.pos.x + ball.r > width) {
+          ball.vel.x *= -1;
+          hitSound.play();
+        }
+        if (ball.pos.y - ball.r < 0) {
+          ball.vel.y *= -1;
+          hitSound.play();
+        }
+        if (ball.pos.y + ball.r > height) {
+          lives--;
+          if (lives <= 0) gameState = 'gameover';
+          else resetBall();
+        }
+
+        // Paddle collision
+        if (ball.pos.y + ball.r > paddle.y && ball.pos.x > paddle.x && ball.pos.x < paddle.x + 100) {
+          let hitPos = (ball.pos.x - paddle.x) / 100;
+          ball.vel.set(10 * (hitPos - 0.5), -ball.vel.y);
+          hitSound.play();
+        }
+
+        // Brick collision
+        for (let row = 0; row < brickRows; row++) {
+          for (let col = 0; col < brickCols; col++) {
+            let brick = bricks[row][col];
+            if (brick && ball.pos.y - ball.r < brick.y + brick.h && ball.pos.y + ball.r > brick.y &&
+                ball.pos.x > brick.x && ball.pos.x < brick.x + brick.w) {
+              if (brick.letter === currentLetter) {
+                bricks[row][col] = null;
+                score++;
+                currentLetter = String.fromCharCode(currentLetter.charCodeAt(0) + 1);
+                correctSound.play();
+                ball.vel.y *= -1;
+                if (score === 26) gameState = 'win';
+              } else {
+                hitSound.play();
+                ball.vel.y *= -1;
+              }
+            }
+          }
+        }
+
+        // Draw UI
+        fill(0);
+        text(`Lives: ${lives} | Time: ${Math.floor((timeLimit - elapsedTime) / 1000)}s | Letter: ${currentLetter}`, width / 2, 20);
+
+        // Paddle movement
+        if (keyIsDown(LEFT_ARROW)) paddle.x -= 5;
+        if (keyIsDown(RIGHT_ARROW)) paddle.x += 5;
+        paddle.x = constrain(paddle.x, 0, width - 100);
       }
 
-      // Draw UI
-      fill(0);
-      text(`Lives: ${lives} | Time: ${Math.floor((timeLimit - elapsedTime) / 1000)}s | Letter: ${currentLetter}`, width / 2, 20);
-
       if (gameState === 'gameover') {
-        text("Game Over! Press Enter to Restart", width / 2, height / 2);
+        fill(0);
+        if (sadEmojiImage) {
+          image(sadEmojiImage, width / 2 - 50, height / 2 - 100, 100, 100);
+        }
+        text("Game Over! Try Again?", width / 2, height / 2 + 50);
+        text("Press Enter or Tap to Restart", width / 2, height / 2 + 80);
       } else if (gameState === 'win') {
-        text("You Win! Press Enter to Restart", width / 2, height / 2);
+        fill(0);
+        if (trophyImage) {
+          image(trophyImage, width / 2 - 50, height / 2 - 100, 100, 100);
+        }
+        text("Congratulations! You Win!", width / 2, height / 2 + 50);
+        text(`Retry with ${Math.floor(timeLimit / 1000 / 60 * 0.8)} minutes?`, width / 2, height / 2 + 80);
+        text("Press Enter or Tap to Restart", width / 2, height / 2 + 110);
       }
     }
 
@@ -176,20 +255,18 @@
     }
 
     function keyPressed() {
-      if (keyCode === ENTER && (gameState === 'setup' || gameState === 'gameover' || gameState === 'win')) {
+      if (keyCode === ENTER && (gameState === 'instructions' || gameState === 'gameover' || gameState === 'win')) {
+        console.log("Enter pressed, starting game");
         gameState = 'playing';
-        lives = parseInt(prompt("Enter number of lives (default 3):", "3")) || 3;
-        timeLimit = (parseFloat(prompt("Enter time limit in minutes (default 5):", "5")) || 5) * 60 * 1000;
-        ballColor = prompt("Enter ball color (default red):", "red") || 'red';
-        startTime = millis();
-        elapsedTime = 0;
-        score = 0;
-        currentLetter = 'A';
+        if (gameState === 'win') timeLimit *= 0.8; // Reduce time by 20% on retry
+        promptSettings();
         initBricks();
         resetBall();
+        currentBackground = backgroundImages.length > 0 ? random(backgroundImages) : null;
       }
       if (key === 'p' || key === 'P') {
         isPaused = !isPaused;
+        console.log("Paused:", isPaused);
       }
       if (key === 'm' || key === 'M') {
         toggleMusic();
@@ -197,18 +274,16 @@
     }
 
     function touchStarted() {
-      if (gameState === 'setup' || gameState === 'gameover' || gameState === 'win') {
+      if (gameState === 'instructions' || gameState === 'gameover' || gameState === 'win') {
+        console.log("Touch started, starting game");
         gameState = 'playing';
-        lives = parseInt(prompt("Enter number of lives (default 3):", "3")) || 3;
-        timeLimit = (parseFloat(prompt("Enter time limit in minutes (default 5):", "5")) || 5) * 60 * 1000;
-        ballColor = prompt("Enter ball color (default red):", "red") || 'red';
-        startTime = millis();
-        elapsedTime = 0;
-        score = 0;
-        currentLetter = 'A';
+        if (gameState === 'win') timeLimit *= 0.8; // Reduce time by 20% on retry
+        promptSettings();
         initBricks();
         resetBall();
+        currentBackground = backgroundImages.length > 0 ? random(backgroundImages) : null;
       }
+      return false;
     }
 
     function toggleMusic() {
@@ -220,22 +295,18 @@
         backgroundMusic.stop();
         document.getElementById('musicBtn').textContent = 'Music: Off';
       }
-    }
-
-    // Paddle movement
-    function keyIsDown() {
-      if (keyIsDown(LEFT_ARROW)) paddle.x -= 5;
-      if (keyIsDown(RIGHT_ARROW)) paddle.x += 5;
-      paddle.x = constrain(paddle.x, 0, width - 100);
+      console.log("Music toggled:", musicPlaying);
     }
 
     // Mobile controls
-    document.getElementById('leftBtn')?.addEventListener('touchstart', () => paddle.x -= 10);
-    document.getElementById('rightBtn')?.addEventListener('touchstart', () => paddle.x += 10);
-    document.getElementById('pauseBtn')?.addEventListener('touchstart', () => isPaused = !isPaused);
-    document.getElementById('musicBtn')?.addEventListener('touchstart', toggleMusic);
+    let leftBtn = document.getElementById('leftBtn');
+    let rightBtn = document.getElementById('rightBtn');
+    if (leftBtn) leftBtn.addEventListener('touchstart', (e) => { paddle.x -= 10; e.preventDefault(); });
+    if (rightBtn) rightBtn.addEventListener('touchstart', (e) => { paddle.x += 10; e.preventDefault(); });
+    document.getElementById('pauseBtn')?.addEventListener('touchstart', (e) => { isPaused = !isPaused; e.preventDefault(); console.log("Paused:", isPaused); });
+    document.getElementById('musicBtn')?.addEventListener('touchstart', (e) => { toggleMusic(); e.preventDefault(); });
 
-    // Prevent default touch behavior
+    // Prevent default touch behavior on canvas
     document.addEventListener('touchstart', (e) => {
       if (e.target.tagName !== 'BUTTON') e.preventDefault();
     }, { passive: false });
