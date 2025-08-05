@@ -47,14 +47,14 @@
         hitSound = loadSound('bone-crack-1.mp3');
         correctSound = loadSound('button-09a.mp3');
         backgroundMusic = loadSound('war_bg_sound.mp3');
-        backgroundImages = [
+        backgroundImages = [             // Placeholder: replace with actual image
           loadImage('bg3.png'),
           loadImage('bg4.png'),
           loadImage('bg5.png'),
           loadImage('bg6.png')
         ];
-        trophyImage = loadImage('assets/trophy.png');
-        sadEmojiImage = loadImage('assets/sad-emoji.png');
+        trophyImage = loadImage('trophy.png');
+        sadEmojiImage = loadImage('sad-emoji.png');
       } catch (e) {
         console.warn("Asset loading failed:", e.message);
         hitSound = { play: () => {} };
@@ -264,4 +264,158 @@
                 bricks[row][col] = null;
                 score += multiplier;
                 multiplier++;
-                currentLetter = String.fromCharCode(currentLetter.charCode
+                currentLetter = String.fromCharCode(currentLetter.charCodeAt(0) + 1);
+                correctSound.play();
+                hitCorrectBrick = true;
+                // Spawn particles
+                for (let i = 0; i < 10; i++) {
+                  particles.push({
+                    x: brick.x + brick.w / 2,
+                    y: brick.y + brick.h / 2,
+                    vx: random(-2, 2),
+                    vy: random(-2, 2),
+                    life: 20
+                  });
+                }
+                // Spawn power-up (10% chance)
+                if (random() < 0.1) {
+                  powerUps.push({
+                    x: brick.x + brick.w / 2,
+                    y: brick.y + brick.h,
+                    type: random(['largePaddle', 'fastBall', 'extraLife'])
+                  });
+                }
+                ball.vel.y *= -1;
+                if (score >= 26) {
+                  gameState = 'win';
+                  if (score * multiplier > highScore) {
+                    highScore = score * multiplier;
+                    localStorage.setItem('highScore', highScore);
+                  }
+                }
+              } else {
+                hitSound.play();
+                ball.vel.y *= -1;
+                multiplier = 1;
+              }
+            }
+          }
+        }
+
+        // Update elapsed time
+        elapsedTime = millis() - startTime;
+        if (elapsedTime > timeLimit) {
+          gameState = 'gameover';
+          if (score * multiplier > highScore) {
+            highScore = score * multiplier;
+            localStorage.setItem('highScore', highScore);
+          }
+        }
+
+        // Draw UI
+        fill(0);
+        text(`Lives: ${lives} | Time: ${Math.floor((timeLimit - elapsedTime) / 1000)}s | Letter: ${currentLetter} | Score: ${score * multiplier} | Multiplier: ${multiplier}x | High Score: ${highScore}`, width / 2, 20);
+      }
+
+      if (gameState === 'gameover') {
+        fill(0);
+        if (sadEmojiImage) {
+          image(sadEmojiImage, width / 2 - 50, height / 2 - 100, 100, 100);
+        }
+        text("Game Over! Try Again?", width / 2, height / 2 + 50);
+        text(`High Score: ${highScore}`, width / 2, height / 2 + 80);
+        text("Press Enter or Tap to Restart", width / 2, height / 2 + 110);
+      } else if (gameState === 'win') {
+        fill(0);
+        if (trophyImage) {
+          image(trophyImage, width / 2 - 50, height / 2 - 100, 100, 100);
+        }
+        text("Congratulations! You Win!", width / 2, height / 2 + 50);
+        text(`High Score: ${highScore}`, width / 2, height / 2 + 80);
+        text(`Retry with ${Math.floor(timeLimit / 1000 / 60 * 0.8)} minutes?`, width / 2, height / 2 + 110);
+        text("Press Enter or Tap to Restart", width / 2, height / 2 + 140);
+      }
+    }
+
+    function resetBall() {
+      ball.pos.set(width / 2, height - 40);
+      ball.vel.set(0, -ballSpeed);
+      paddle.w = 100; // Reset paddle size
+    }
+
+    function keyPressed() {
+      if (keyCode === ENTER && (gameState === 'instructions' || gameState === 'gameover' || gameState === 'win')) {
+        console.log("Enter pressed, starting game");
+        if (gameState === 'instructions') {
+          select('.instructions').remove();
+          showSettingsForm();
+          gameState = 'settings';
+        } else {
+          if (gameState === 'win') timeLimit *= 0.8;
+          startGame();
+        }
+      }
+      if (key === 'p' || key === 'P') {
+        isPaused = !isPaused;
+        console.log("Paused:", isPaused);
+      }
+      if (key === 'm' || key === 'M') {
+        toggleMusic();
+      }
+    }
+
+    function touchStarted() {
+      if (gameState === 'instructions' || gameState === 'gameover' || gameState === 'win') {
+        console.log("Touch started, starting game");
+        if (gameState === 'instructions') {
+          select('.instructions').remove();
+          showSettingsForm();
+          gameState = 'settings';
+        } else {
+          if (gameState === 'win') timeLimit *= 0.8;
+          startGame();
+        }
+      }
+      return false;
+    }
+
+    function toggleMusic() {
+      musicPlaying = !musicPlaying;
+      if (musicPlaying) {
+        backgroundMusic.loop();
+        document.getElementById('musicBtn').textContent = 'Music: On';
+      } else {
+        backgroundMusic.stop();
+        document.getElementById('musicBtn').textContent = 'Music: Off';
+      }
+      console.log("Music toggled:", musicPlaying);
+    }
+
+    // Paddle movement
+    function drawPaddleMovement() {
+      if (keyIsDown(LEFT_ARROW)) paddle.x -= 5;
+      if (keyIsDown(RIGHT_ARROW)) paddle.x += 5;
+      paddle.x = constrain(paddle.x, 0, width - paddle.w);
+    }
+
+    // Mobile controls
+    let leftBtn = document.getElementById('leftBtn');
+    let rightBtn = document.getElementById('rightBtn');
+    if (leftBtn) leftBtn.addEventListener('touchstart', (e) => { paddle.x -= 10; e.preventDefault(); });
+    if (rightBtn) rightBtn.addEventListener('touchstart', (e) => { paddle.x += 10; e.preventDefault(); });
+    document.getElementById('pauseBtn')?.addEventListener('touchstart', (e) => { isPaused = !isPaused; e.preventDefault(); console.log("Paused:", isPaused); });
+    document.getElementById('musicBtn')?.addEventListener('touchstart', (e) => { toggleMusic(); e.preventDefault(); });
+
+    // Prevent default touch behavior on canvas
+    document.addEventListener('touchstart', (e) => {
+      if (e.target.tagName !== 'BUTTON' && e.target.tagName !== 'INPUT') e.preventDefault();
+    }, { passive: false });
+
+    // Call paddle movement in draw
+    function draw() {
+      if (gameState === 'playing') drawPaddleMovement();
+      // Rest of draw function (already defined above)
+    }
+  </script>
+</body>
+</html>
