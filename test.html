@@ -20,11 +20,10 @@
     .instructions h2, .settings-form h2 { margin: 0 0 10px; font-weight: bold; color: black; }
     .instructions p { margin: 5px 0; font-weight: bold; color: black; }
     .settings-form label { display: block; margin: 10px 0 5px; font-weight: bold; color: black; }
-    .settings-form input, .settings-form select { padding: 5px; font-size: 16px; width: 200px; }
-    .game-over, .win-screen, .ball-punctured { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; background: white; padding: 20px; border-radius: 10px; z-index: 10; }
-    .game-over img, .win-screen img, .ball-punctured img { max-width: 100px; }
+    .settings-form select { padding: 5px; font-size: 16px; width: 200px; }
+    .game-over, .win-screen { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; background: white; padding: 20px; border-radius: 10px; z-index: 10; }
+    .game-over img, .win-screen img { max-width: 100px; }
   </style>
-
 </head>
 <body>
   <div class="controls mobile-controls">
@@ -35,7 +34,7 @@
   </div>
   <script>
     let paddle, ball, bricks = [];
-    let lives = 3, timeLimit = 5 * 60 * 1000, ballColor = 'red';
+    let lives = 3, timeLimit = 15 * 60 * 1000, ballColor = 'red';
     let gameState = 'instructions', currentLetter = 'A', score = 0, multiplier = 1;
     let hitSound, correctSound, backgroundMusic;
     let backgroundImages = [], currentBackground;
@@ -43,8 +42,6 @@
     let startTime, elapsedTime = 0, isPaused = false, musicPlaying = true;
     let powerUps = [], particles = [], ballSpeed = 5, highScore = localStorage.getItem('highScore') || 0;
     const brickRows = 3, brickCols = 10;
-    let ballDeform = 0, ballDeformTime = 0;
-    let showPunctureMessage = false, punctureStartTime = 0;
 
     function preload() {
       try {
@@ -74,7 +71,7 @@
       createCanvas(800, 600);
       paddle = createVector(width / 2 - 50, height - 20);
       paddle.w = 100;
-      ball = { pos: createVector(width / 2, height - 40), vel: createVector(0, -ballSpeed), r: 20 }; // Doubled size
+      ball = { pos: createVector(width / 2, height - 40), vel: createVector(0, -ballSpeed), r: 20 };
       initBricks();
       if (musicPlaying) backgroundMusic.loop();
       textAlign(CENTER, CENTER);
@@ -111,17 +108,13 @@
       formDiv.class('settings-form');
       formDiv.html(`
         <h2>Game Settings</h2>
-        <label for="gameTime">Game Time (minutes):</label>
-        <input type="number" id="gameTime" value="5" min="1" max="15" step="0.5">
-        <label for="playerLives">Player Lives:</label>
-        <input type="number" id="playerLives" value="3" min="1" max="5">
         <label for="ballColor">Ball Color:</label>
         <select id="ballColor">
-          <option value="red">Red</option>
-          <option value="blue">Blue</option>
-          <option value="green">Green</option>
+          <option value="red" ${ballColor === 'red' ? 'selected' : ''}>Red</option>
+          <option value="blue" ${ballColor === 'blue' ? 'selected' : ''}>Blue</option>
+          <option value="green" ${ballColor === 'green' ? 'selected' : ''}>Green</option>
         </select>
-        <button id="submitSettings">Submit</button>
+        <button id="submitSettings">Start Game</button>
       `);
       select('#submitSettings').mousePressed(() => {
         console.log("Submit button clicked");
@@ -131,23 +124,17 @@
 
     function startGame() {
       console.log("startGame called, current gameState:", gameState);
-      let gameTimeInput = select('#gameTime');
-      let playerLivesInput = select('#playerLives');
       let ballColorInput = select('#ballColor');
-      if (!gameTimeInput || !playerLivesInput || !ballColorInput) {
-        console.error("Form inputs not found, re-showing settings form");
+      if (!ballColorInput) {
+        console.error("Ball color input not found, re-showing settings form");
         showSettingsForm();
         gameState = 'settings';
         return;
       }
-      let inputTime = parseFloat(gameTimeInput.value()) || 5;
-      if (inputTime > 15) inputTime = 15;
-      timeLimit = inputTime * 60 * 1000;
-      let inputLives = parseInt(playerLivesInput.value()) || 3;
-      if (inputLives > 5) inputLives = 5;
-      lives = inputLives;
       ballColor = ballColorInput.value() || 'red';
-      console.log("Settings applied:", { timeLimit, lives, ballColor });
+      lives = 3;
+      timeLimit = 15 * 60 * 1000;
+      console.log("Settings applied:", { lives, timeLimit, ballColor });
       select('.settings-form').remove();
       gameState = 'playing';
       startTime = millis();
@@ -213,24 +200,10 @@
         fill(0, 0, 255);
         rect(paddle.x, paddle.y, paddle.w, 10);
 
-        // Deformation logic
-        if (ballDeformTime > 0) {
-          ballDeformTime--;
-          ballDeform = lerp(ballDeform, 0, 0.1);
-        } else {
-          ballDeform = 0;
-        }
-
-        // Draw ball with deformation
-        push();
-        translate(ball.pos.x, ball.pos.y);
-        let deformY = ball.vel.y < 0 ? 1.2 : 0.8; // Squash on bottom hit, stretch on top
-        if (ballDeform > 0) deformY *= (1 + ballDeform);
-        scale(1, deformY);
+        // Draw ball
         fill(ballColor);
         noStroke();
-        ellipse(0, 0, ball.r * 2 * (1 - ballDeform * 0.1), ball.r * 2);
-        pop();
+        ellipse(ball.pos.x, ball.pos.y, ball.r * 2);
 
         // Draw bricks
         for (let row of bricks) {
@@ -244,13 +217,12 @@
               }
               push();
               translate(brick.x + brick.w / 2 + vibX, brick.y + brick.h / 2 + vibY);
-              // Attractive bricks: gradient and border
               let c1 = color(100, 100, 255);
               let c2 = brick.color;
               for (let i = 0; i < brick.h; i++) {
                 let inter = map(i, 0, brick.h, 0, 1);
                 fill(lerpColor(c1, c2, inter));
-                if (isTarget) fill(lerpColor(color(255, 255, 0), c2, inter)); // Highlight yellow
+                if (isTarget) fill(lerpColor(color(255, 255, 0), c2, inter));
                 noStroke();
                 rect(-brick.w / 2, -brick.h / 2 + i, brick.w, 1);
               }
@@ -297,20 +269,14 @@
         if (ball.pos.x - ball.r < 0 || ball.pos.x + ball.r > width) {
           ball.vel.x *= -1;
           hitSound.play();
-          ballDeformTime = 10;
-          ballDeform = 0.3;
           multiplier = 1;
         }
         if (ball.pos.y - ball.r < 0) {
           ball.vel.y *= -1;
           hitSound.play();
-          ballDeformTime = 10;
-          ballDeform = -0.3;
           multiplier = 1;
         }
         if (ball.pos.y + ball.r > height) {
-          showPunctureMessage = true;
-          punctureStartTime = millis();
           lives--;
           if (lives <= 0) {
             gameState = 'gameover';
@@ -319,10 +285,7 @@
               localStorage.setItem('highScore', highScore);
             }
           } else {
-            setTimeout(() => {
-              resetBall();
-              showPunctureMessage = false;
-            }, 2000);
+            resetBall();
           }
         }
 
@@ -331,8 +294,6 @@
           let hitPos = (ball.pos.x - paddle.x) / paddle.w;
           ball.vel.set(10 * (hitPos - 0.5), -ballSpeed);
           hitSound.play();
-          ballDeformTime = 10;
-          ballDeform = 0.3;
           multiplier = 1;
         }
 
@@ -342,8 +303,6 @@
             let brick = bricks[row][col];
             if (brick && ball.pos.y - ball.r < brick.y + brick.h && ball.pos.y + ball.r > brick.y &&
                 ball.pos.x > brick.x && ball.pos.x < brick.x + brick.w) {
-              ballDeformTime = 10;
-              ballDeform = 0.2;
               if (brick.letter === currentLetter) {
                 bricks[row][col] = null;
                 score += multiplier;
@@ -398,21 +357,6 @@
         text(`Lives: ${lives} | Time: ${Math.floor((timeLimit - elapsedTime) / 1000)}s | Letter: ${currentLetter} | Score: ${score * multiplier} | Multiplier: ${multiplier}x | High Score: ${highScore}`, width / 2, 20);
       }
 
-      // Puncture message
-      if (showPunctureMessage && gameState === 'playing') {
-        let punctureDiv = createDiv('');
-        punctureDiv.class('ball-punctured');
-        punctureDiv.html(`
-          <h2>Ball Punctured !!!</h2>
-          <p>Total Lives Left: ${lives}</p>
-        `);
-        if (millis() - punctureStartTime > 2000) {
-          select('.ball-punctured').remove();
-          showPunctureMessage = false;
-          if (lives > 0) resetBall();
-        }
-      }
-
       if (gameState === 'gameover') {
         fill(0);
         if (sadEmojiImage) {
@@ -437,8 +381,6 @@
       ball.pos.set(width / 2, height - 40);
       ball.vel.set(0, -ballSpeed);
       paddle.w = 100;
-      ballDeform = 0;
-      ballDeformTime = 0;
     }
 
     function keyPressed() {
