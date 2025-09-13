@@ -6,25 +6,41 @@
   <title>Alphabet Breakout</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/addons/p5.sound.min.js"></script>
-
   <style>
     body { margin: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; background: #f0f0f0; }
     canvas { display: block; touch-action: none; }
     .controls { position: absolute; bottom: 10px; display: flex; gap: 10px; }
     .mobile-controls { display: none; }
+    .touchpad-left, .touchpad-right { 
+      position: absolute; bottom: 0; height: 50%; width: 40%; background: rgba(0, 0, 0, 0.1); 
+      display: none; z-index: 5; opacity: 0.3; transition: opacity 0.2s; }
+    .touchpad-left:active, .touchpad-right:active { opacity: 0.5; }
+    .touchpad-left { left: 0; }
+    .touchpad-right { right: 0; }
     @media (max-width: 600px) {
       .mobile-controls { display: flex; }
+      .touchpad-left, .touchpad-right { display: block; }
     }
-    button { padding: 10px; font-size: 16px; cursor: pointer; }
-    .instructions, .settings-form { text-align: center; background: white; padding: 20px; border-radius: 10px; max-width: 600px; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); }
-    .instructions h2, .settings-form h2 { margin: 0 0 10px; font-weight: bold; color: black; }
-    .instructions p { margin: 5px 0; font-weight: bold; color: black; }
-    .settings-form label { display: block; margin: 10px 0 5px; font-weight: bold; color: black; }
-    .settings-form input { padding: 5px; font-size: 16px; width: 200px; }
-    .game-over, .win-screen { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; background: white; padding: 20px; border-radius: 10px; }
+    button { 
+      padding: 12px 24px; font-size: 16px; cursor: pointer; border: none; 
+      border-radius: 12px; background: linear-gradient(135deg, #ff6f61, #ffb88c); 
+      color: white; font-weight: bold; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2); 
+      transition: transform 0.2s, box-shadow 0.2s; }
+    button:hover { transform: translateY(-2px); box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3); }
+    button:active { transform: translateY(0); box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2); }
+    .instructions, .settings-form { text-align: center; background: white; padding: 20px; 
+      border-radius: 10px; max-width: 600px; position: absolute; top: 50%; left: 50%; 
+      transform: translate(-50%, -50%); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3); }
+    .instructions h2, .settings-form h2 { margin: 0 0 10px; font-weight: bold; color: #333; }
+    .instructions p, .settings-form p { margin: 5px 0; font-weight: bold; color: #333; }
+    .settings-form label { display: block; margin: 10px 0 5px; font-weight: bold; color: #333; }
+    .settings-form select { padding: 5px; font-size: 16px; width: 200px; border-radius: 5px; }
+    .game-over, .win-screen, .missed-ball { 
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
+      text-align: center; background: white; padding: 20px; border-radius: 10px; 
+      z-index: 10; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3); }
     .game-over img, .win-screen img { max-width: 100px; }
   </style>
-
 </head>
 <body>
   <div class="controls mobile-controls">
@@ -33,21 +49,29 @@
     <button id="pauseBtn">Pause</button>
     <button id="musicBtn">Music: On</button>
   </div>
+  <div class="touchpad-left"></div>
+  <div class="touchpad-right"></div>
   <script>
     let paddle, ball, bricks = [];
-    let lives = 3, timeLimit = 5 * 60 * 1000, ballColor = 'red';
+    let lives = 3, timeLimit = 15 * 60 * 1000, ballColor = 'red';
     let gameState = 'instructions', currentLetter = 'A', score = 0, multiplier = 1;
-    let hitSound, correctSound, backgroundMusic;
+    let hitSound, correctSound, powerUpSound, backgroundMusic;
     let backgroundImages = [], currentBackground;
     let trophyImage, sadEmojiImage;
     let startTime, elapsedTime = 0, isPaused = false, musicPlaying = true;
     let powerUps = [], particles = [], ballSpeed = 5, highScore = localStorage.getItem('highScore') || 0;
+    let bgParticles = [], scorePopups = [];
     const brickRows = 3, brickCols = 10;
+    let showMissedMessage = false, missedMessageStartTime = 0;
+    let paddleWidth = window.innerWidth <= 600 ? 80 : 100;
+    let ballRadius = window.innerWidth <= 600 ? 15 : 20;
+    let missedMessageDiv = null, gameOverDiv = null, winDiv = null;
 
     function preload() {
       try {
         hitSound = loadSound('bone-crack-1.mp3');
         correctSound = loadSound('button-09a.mp3');
+        powerUpSound = loadSound('bone-crack-1.mp3');
         backgroundMusic = loadSound('war_bg_sound.mp3');
         backgroundImages = [
           loadImage('bg3.png'),
@@ -61,6 +85,7 @@
         console.warn("Asset loading failed:", e.message);
         hitSound = { play: () => {} };
         correctSound = { play: () => {} };
+        powerUpSound = { play: () => {} };
         backgroundMusic = { loop: () => {}, stop: () => {} };
         backgroundImages = [];
         trophyImage = null;
@@ -70,15 +95,41 @@
 
     function setup() {
       createCanvas(800, 600);
-      paddle = createVector(width / 2 - 50, height - 20);
-      paddle.w = 100;
-      ball = { pos: createVector(width / 2, height - 40), vel: createVector(0, -ballSpeed), r: 10 };
+      paddle = createVector(width / 2 - paddleWidth / 2, height - 20);
+      paddle.w = paddleWidth;
+      ball = { pos: createVector(width / 2, height - 40), vel: createVector(0, -ballSpeed), r: ballRadius };
       initBricks();
+      initBgParticles();
       if (musicPlaying) backgroundMusic.loop();
       textAlign(CENTER, CENTER);
       textSize(20);
       currentBackground = backgroundImages.length > 0 ? random(backgroundImages) : null;
       showInstructions();
+
+      // Touchpad controls for mobile
+      let touchpadLeft = document.querySelector('.touchpad-left');
+      let touchpadRight = document.querySelector('.touchpad-right');
+      if (touchpadLeft) {
+        touchpadLeft.addEventListener('touchstart', (e) => { paddle.x -= 10; e.preventDefault(); });
+        touchpadLeft.addEventListener('touchmove', (e) => { paddle.x -= 10; e.preventDefault(); });
+      }
+      if (touchpadRight) {
+        touchpadRight.addEventListener('touchstart', (e) => { paddle.x += 10; e.preventDefault(); });
+        touchpadRight.addEventListener('touchmove', (e) => { paddle.x += 10; e.preventDefault(); });
+      }
+    }
+
+    function initBgParticles() {
+      for (let i = 0; i < 50; i++) {
+        bgParticles.push({
+          x: random(width),
+          y: random(height),
+          vx: random(-0.5, 0.5),
+          vy: random(-0.5, 0.5),
+          size: random(2, 5),
+          alpha: random(50, 100)
+        });
+      }
     }
 
     function showInstructions() {
@@ -88,10 +139,10 @@
       instrDiv.html(`
         <h2>Instructions</h2>
         <p>PC: Use Left/Right arrow keys to move paddle</p>
-        <p>Mobile: Use Left/Right buttons to move paddle</p>
+        <p>Mobile: Use touchpads or Left/Right buttons</p>
         <p>Hit bricks in alphabetical order (A to Z)</p>
         <p>Consecutive hits increase score multiplier</p>
-        <p>Catch power-ups for bonuses</p>
+        <p>Catch power-ups for bonuses (Large Paddle, Fast/Slow Ball, Extra Life)</p>
         <p>Press P or Pause button to pause</p>
         <p>Press M or Music button to toggle music</p>
         <button id="startBtn">Start Game</button>
@@ -103,19 +154,27 @@
     }
 
     function showSettingsForm() {
-      select('.instructions').remove();
+      select('.instructions')?.remove();
+      select('.game-over')?.remove();
+      select('.win-screen')?.remove();
+      select('.missed-ball')?.remove();
+      missedMessageDiv = null;
+      gameOverDiv = null;
+      winDiv = null;
       console.log("Showing settings form");
       let formDiv = createDiv('');
       formDiv.class('settings-form');
       formDiv.html(`
         <h2>Game Settings</h2>
-        <label for="gameTime">Game Time (minutes):</label>
-        <input type="number" id="gameTime" value="5" min="1" step="0.5">
-        <label for="playerLives">Player Lives:</label>
-        <input type="number" id="playerLives" value="3" min="1">
+        <p>Player Lives: 3</p>
+        <p>Game Time: 15 minutes</p>
         <label for="ballColor">Ball Color:</label>
-        <input type="text" id="ballColor" value="red">
-        <button id="submitSettings">Submit</button>
+        <select id="ballColor" onchange="updateBallColor()">
+          <option value="red" ${ballColor === 'red' ? 'selected' : ''}>Red</option>
+          <option value="blue" ${ballColor === 'blue' ? 'selected' : ''}>Blue</option>
+          <option value="green" ${ballColor === 'green' ? 'selected' : ''}>Green</option>
+        </select>
+        <button id="submitSettings">Start Game</button>
       `);
       select('#submitSettings').mousePressed(() => {
         console.log("Submit button clicked");
@@ -123,24 +182,34 @@
       });
     }
 
+    function updateBallColor() {
+      let ballColorInput = select('#ballColor');
+      if (ballColorInput) {
+        ballColor = ballColorInput.value();
+        console.log("Ball color updated to:", ballColor);
+      }
+    }
+
     function startGame() {
       console.log("startGame called, current gameState:", gameState);
-      let gameTimeInput = select('#gameTime');
-      let playerLivesInput = select('#playerLives');
       let ballColorInput = select('#ballColor');
-      if (!gameTimeInput || !playerLivesInput || !ballColorInput) {
-        console.error("Form inputs not found, re-showing settings form");
+      if (!ballColorInput) {
+        console.error("Ball color input not found, re-showing settings form");
         showSettingsForm();
         gameState = 'settings';
         return;
       }
-      timeLimit = (parseFloat(gameTimeInput.value()) || 5) * 60 * 1000;
-      lives = parseInt(playerLivesInput.value()) || 3;
       ballColor = ballColorInput.value() || 'red';
-      if (timeLimit < 0) timeLimit = 5 * 60 * 1000;
-      if (lives < 1) lives = 3;
-      console.log("Settings:", { timeLimit, lives, ballColor });
-      select('.settings-form').remove();
+      lives = 3;
+      timeLimit = 15 * 60 * 1000;
+      console.log("Settings applied:", { lives, timeLimit, ballColor });
+      select('.settings-form')?.remove();
+      select('.game-over')?.remove();
+      select('.win-screen')?.remove();
+      select('.missed-ball')?.remove();
+      missedMessageDiv = null;
+      gameOverDiv = null;
+      winDiv = null;
       gameState = 'playing';
       startTime = millis();
       score = 0;
@@ -148,6 +217,8 @@
       currentLetter = 'A';
       initBricks();
       resetBall();
+      showMissedMessage = false;
+      scorePopups = [];
       currentBackground = backgroundImages.length > 0 ? random(backgroundImages) : null;
     }
 
@@ -165,10 +236,11 @@
           bricks[row][col] = {
             x: col * (width / brickCols) + 10,
             y: row * 30 + 50,
-            w: width / brickCols - 20,
-            h: 20,
+            w: width / brickCols - 17,
+            h: 23,
             letter: letters[col],
-            color: color(random(255), random(255), random(255))
+            color: color(random(100, 255), random(100, 255), random(100, 255)),
+            glow: 0
           };
         }
       }
@@ -178,7 +250,18 @@
       if (currentBackground) {
         image(currentBackground, 0, 0, width, height);
       } else {
-        background(220);
+        background(50, 50, 80);
+      }
+
+      // Draw background particles
+      for (let p of bgParticles) {
+        fill(255, 255, 255, p.alpha);
+        noStroke();
+        ellipse(p.x, p.y, p.size);
+        p.x += p.vx;
+        p.y += p.vy;
+        if (p.x < 0 || p.x > width) p.vx *= -1;
+        if (p.y < 0 || p.y > height) p.vy *= -1;
       }
 
       if (gameState === 'instructions' || gameState === 'settings') {
@@ -186,7 +269,9 @@
       }
 
       if (isPaused) {
-        fill(0);
+        fill(0, 0, 0, 200);
+        rect(0, 0, width, height);
+        fill(255);
         text("Paused", width / 2, height / 2);
         return;
       }
@@ -201,22 +286,56 @@
         ballSpeed = 5 + Math.min(Math.floor(elapsedTime / 30000 + score / 5), 5);
         ball.vel.setMag(ballSpeed);
 
-        // Draw paddle
+        // Draw paddle with shadow
+        drawingContext.shadowBlur = 10;
+        drawingContext.shadowColor = 'rgba(0, 0, 0, 0.5)';
         fill(0, 0, 255);
-        rect(paddle.x, paddle.y, paddle.w, 10);
+        rect(paddle.x, paddle.y, paddle.w, 10, 5);
+        drawingContext.shadowBlur = 0;
 
-        // Draw ball
-        fill(ballColor);
+        // Draw ball with gradient
+        let gradient = drawingContext.createRadialGradient(ball.pos.x, ball.pos.y, ball.r / 2, ball.pos.x, ball.pos.y, ball.r);
+        gradient.addColorStop(0, ballColor);
+        gradient.addColorStop(1, 'white');
+        drawingContext.fillStyle = gradient;
+        noStroke();
         ellipse(ball.pos.x, ball.pos.y, ball.r * 2);
 
         // Draw bricks
         for (let row of bricks) {
           for (let brick of row) {
             if (brick) {
-              fill(brick.color);
-              rect(brick.x, brick.y, brick.w, brick.h);
+              let vibX = 0, vibY = 0;
+              let isTarget = brick.letter === currentLetter;
+              if (isTarget) {
+                vibX = sin(millis() / 100) * 2;
+                vibY = cos(millis() / 150) * 1;
+                brick.glow = min(brick.glow + 0.1, 10);
+              } else {
+                brick.glow = max(brick.glow - 0.1, 0);
+              }
+              push();
+              translate(brick.x + brick.w / 2 + vibX, brick.y + brick.h / 2 + vibY);
+              drawingContext.shadowBlur = brick.glow;
+              drawingContext.shadowColor = 'yellow';
+              let c1 = color(100, 100, 255);
+              let c2 = brick.color;
+              for (let i = 0; i < brick.h; i++) {
+                let inter = map(i, 0, brick.h, 0, 1);
+                fill(lerpColor(c1, c2, inter));
+                if (isTarget) fill(lerpColor(color(255, 255, 0), c2, inter));
+                noStroke();
+                rect(-brick.w / 2, -brick.h / 2 + i, brick.w, 1);
+              }
+              stroke(isTarget ? color(255, 255, 0) : 0);
+              strokeWeight(2);
+              noFill();
+              rect(-brick.w / 2, -brick.h / 2, brick.w, brick.h);
+              drawingContext.shadowBlur = 0;
+              pop();
               fill(255);
-              text(brick.letter, brick.x + brick.w / 2, brick.y + brick.h / 2);
+              textSize(16);
+              text(brick.letter, brick.x + brick.w / 2 + vibX, brick.y + brick.h / 2 + vibY);
             }
           }
         }
@@ -224,14 +343,16 @@
         // Draw power-ups
         for (let i = powerUps.length - 1; i >= 0; i--) {
           let p = powerUps[i];
-          fill(p.type === 'largePaddle' ? 'green' : p.type === 'fastBall' ? 'red' : 'yellow');
+          fill(p.type === 'largePaddle' ? 'green' : p.type === 'fastBall' ? 'red' : p.type === 'slowBall' ? 'blue' : 'yellow');
           ellipse(p.x, p.y, 20);
           p.y += 3;
           if (p.y > height) powerUps.splice(i, 1);
           if (p.y + 10 > paddle.y && p.x > paddle.x && p.x < paddle.x + paddle.w) {
-            if (p.type === 'largePaddle') paddle.w = 150;
+            if (p.type === 'largePaddle') paddle.w = paddleWidth * 1.5;
             else if (p.type === 'fastBall') ballSpeed += 2;
+            else if (p.type === 'slowBall') ballSpeed = max(ballSpeed - 2, 3);
             else if (p.type === 'extraLife') lives++;
+            powerUpSound.play();
             powerUps.splice(i, 1);
           }
         }
@@ -239,7 +360,7 @@
         // Draw particles
         for (let i = particles.length - 1; i >= 0; i--) {
           let p = particles[i];
-          fill(255, 255, 0);
+          fill(255, 255, 0, map(p.life, 0, 20, 0, 255));
           ellipse(p.x, p.y, 5);
           p.x += p.vx;
           p.y += p.vy;
@@ -247,79 +368,96 @@
           if (p.life <= 0) particles.splice(i, 1);
         }
 
-        // Update ball
-        ball.pos.add(ball.vel);
-        if (ball.pos.x - ball.r < 0 || ball.pos.x + ball.r > width) {
-          ball.vel.x *= -1;
-          hitSound.play();
-          multiplier = 1;
+        // Draw score popups
+        for (let i = scorePopups.length - 1; i >= 0; i--) {
+          let s = scorePopups[i];
+          fill(255, 255, 0, map(s.life, 0, 30, 0, 255));
+          textSize(16);
+          text(`+${s.points}`, s.x, s.y);
+          s.y -= 1;
+          s.life--;
+          if (s.life <= 0) scorePopups.splice(i, 1);
         }
-        if (ball.pos.y - ball.r < 0) {
-          ball.vel.y *= -1;
-          hitSound.play();
-          multiplier = 1;
-        }
-        if (ball.pos.y + ball.r > height) {
-          lives--;
-          if (lives <= 0) {
-            gameState = 'gameover';
-            if (score * multiplier > highScore) {
-              highScore = score * multiplier;
-              localStorage.setItem('highScore', highScore);
-            }
-          } else {
-            resetBall();
+
+        // Update ball (only if not showing missed message)
+        if (!showMissedMessage) {
+          ball.pos.add(ball.vel);
+          if (ball.pos.x - ball.r < 0 || ball.pos.x + ball.r > width) {
+            ball.vel.x *= -1;
+            hitSound.play();
+            multiplier = 1;
           }
-        }
+          if (ball.pos.y - ball.r < 0) {
+            ball.vel.y *= -1;
+            hitSound.play();
+            multiplier = 1;
+          }
+          if (ball.pos.y + ball.r > height) {
+            lives--;
+            if (lives <= 0) {
+              gameState = 'gameover';
+              if (score * multiplier > highScore) {
+                highScore = score * multiplier;
+                localStorage.setItem('highScore', highScore);
+              }
+            } else {
+              showMissedMessage = true;
+              missedMessageStartTime = millis();
+              resetBall();
+            }
+          }
 
-        // Paddle collision
-        if (ball.pos.y + ball.r > paddle.y && ball.pos.x > paddle.x && ball.pos.x < paddle.x + paddle.w) {
-          let hitPos = (ball.pos.x - paddle.x) / paddle.w;
-          ball.vel.set(10 * (hitPos - 0.5), -ballSpeed);
-          hitSound.play();
-          multiplier = 1;
-        }
+          // Paddle collision
+          if (ball.pos.y + ball.r > paddle.y && ball.pos.x > paddle.x && ball.pos.x < paddle.x + paddle.w) {
+            let hitPos = (ball.pos.x - paddle.x) / paddle.w;
+            ball.vel.set(10 * (hitPos - 0.5), -ballSpeed);
+            hitSound.play();
+            multiplier = 1;
+          }
 
-        // Brick collision
-        for (let row = 0; row < brickRows; row++) {
-          for (let col = 0; col < brickCols; col++) {
-            let brick = bricks[row][col];
-            if (brick && ball.pos.y - ball.r < brick.y + brick.h && ball.pos.y + ball.r > brick.y &&
-                ball.pos.x > brick.x && ball.pos.x < brick.x + brick.w) {
-              if (brick.letter === currentLetter) {
-                bricks[row][col] = null;
-                score += multiplier;
-                multiplier++;
-                currentLetter = String.fromCharCode(currentLetter.charCodeAt(0) + 1);
-                correctSound.play();
-                for (let i = 0; i < 10; i++) {
-                  particles.push({
-                    x: brick.x + brick.w / 2,
-                    y: brick.y + brick.h / 2,
-                    vx: random(-2, 2),
-                    vy: random(-2, 2),
-                    life: 20
-                  });
-                }
-                if (random() < 0.1) {
-                  powerUps.push({
-                    x: brick.x + brick.w / 2,
-                    y: brick.y + brick.h,
-                    type: random(['largePaddle', 'fastBall', 'extraLife'])
-                  });
-                }
-                ball.vel.y *= -1;
-                if (score >= 26) {
-                  gameState = 'win';
-                  if (score * multiplier > highScore) {
-                    highScore = score * multiplier;
-                    localStorage.setItem('highScore', highScore);
+          // Brick collision
+          for (let row = 0; row < brickRows; row++) {
+            for (let col = 0; col < brickCols; col++) {
+              let brick = bricks[row][col];
+              if (brick && ball.pos.y - ball.r < brick.y + brick.h && ball.pos.y + ball.r > brick.y &&
+                  ball.pos.x > brick.x && ball.pos.x < brick.x + brick.w) {
+                if (brick.letter === currentLetter) {
+                  bricks[row][col] = null;
+                  let points = multiplier;
+                  score += points;
+                  multiplier++;
+                  scorePopups.push({ x: brick.x + brick.w / 2, y: brick.y, points: points, life: 30 });
+                  currentLetter = String.fromCharCode(currentLetter.charCodeAt(0) + 1);
+                  correctSound.play();
+                  for (let i = 0; i < 20; i++) {
+                    particles.push({
+                      x: brick.x + brick.w / 2,
+                      y: brick.y + brick.h / 2,
+                      vx: random(-3, 3),
+                      vy: random(-3, 3),
+                      life: 20
+                    });
                   }
+                  if (random() < 0.15) {
+                    powerUps.push({
+                      x: brick.x + brick.w / 2,
+                      y: brick.y + brick.h,
+                      type: random(['largePaddle', 'fastBall', 'slowBall', 'extraLife'])
+                    });
+                  }
+                  ball.vel.y *= -1;
+                  if (score >= 26) {
+                    gameState = 'win';
+                    if (score * multiplier > highScore) {
+                      highScore = score * multiplier;
+                      localStorage.setItem('highScore', highScore);
+                    }
+                  }
+                } else {
+                  hitSound.play();
+                  ball.vel.y *= -1;
+                  multiplier = 1;
                 }
-              } else {
-                hitSound.play();
-                ball.vel.y *= -1;
-                multiplier = 1;
               }
             }
           }
@@ -336,49 +474,97 @@
         }
 
         // Draw UI
-        fill(0);
+        fill(255);
+        drawingContext.shadowBlur = 5;
+        drawingContext.shadowColor = 'rgba(0, 0, 0, 0.5)';
         text(`Lives: ${lives} | Time: ${Math.floor((timeLimit - elapsedTime) / 1000)}s | Letter: ${currentLetter} | Score: ${score * multiplier} | Multiplier: ${multiplier}x | High Score: ${highScore}`, width / 2, 20);
+        drawingContext.shadowBlur = 0;
+
+        // Missed ball message
+        if (showMissedMessage && gameState === 'playing') {
+          if (!missedMessageDiv) {
+            missedMessageDiv = createDiv('');
+            missedMessageDiv.class('missed-ball');
+            missedMessageDiv.html(`
+              <h2>You Missed !!!</h2>
+              <p>Total Lives Left: ${lives}</p>
+            `);
+          }
+          if (millis() - missedMessageStartTime > 3000) {
+            if (missedMessageDiv) {
+              missedMessageDiv.remove();
+              missedMessageDiv = null;
+            }
+            showMissedMessage = false;
+          }
+        }
       }
 
       if (gameState === 'gameover') {
-        fill(0);
-        if (sadEmojiImage) {
-          image(sadEmojiImage, width / 2 - 50, height / 2 - 100, 100, 100);
+        if (!gameOverDiv) {
+          gameOverDiv = createDiv('');
+          gameOverDiv.class('game-over');
+          gameOverDiv.html(`
+            ${sadEmojiImage ? '<img src="sad-emoji.png" alt="Sad Emoji">' : ''}
+            <p>Game Over! Try Again?</p>
+            <p>High Score: ${highScore}</p>
+            <p>Press Enter or Tap to Restart</p>
+          `);
         }
-        text("Game Over! Try Again?", width / 2, height / 2 + 50);
-        text(`High Score: ${highScore}`, width / 2, height / 2 + 80);
-        text("Press Enter or Tap to Restart", width / 2, height / 2 + 110);
       } else if (gameState === 'win') {
-        fill(0);
-        if (trophyImage) {
-          image(trophyImage, width / 2 - 50, height / 2 - 100, 100, 100);
+        if (!winDiv) {
+          winDiv = createDiv('');
+          winDiv.class('win-screen');
+          winDiv.html(`
+            ${trophyImage ? '<img src="trophy.png" alt="Trophy">' : ''}
+            <p>Congratulations! You Win!</p>
+            <p>High Score: ${highScore}</p>
+            <p>Retry with ${Math.floor(timeLimit / 1000 / 60 * 0.8)} minutes?</p>
+            <p>Press Enter or Tap to Restart</p>
+          `);
         }
-        text("Congratulations! You Win!", width / 2, height / 2 + 50);
-        text(`High Score: ${highScore}`, width / 2, height / 2 + 80);
-        text(`Retry with ${Math.floor(timeLimit / 1000 / 60 * 0.8)} minutes?`, width / 2, height / 2 + 110);
-        text("Press Enter or Tap to Restart", width / 2, height / 2 + 140);
+      } else {
+        // Ensure game over and win screens are removed when not in those states
+        if (gameOverDiv) {
+          gameOverDiv.remove();
+          gameOverDiv = null;
+        }
+        if (winDiv) {
+          winDiv.remove();
+          winDiv = null;
+        }
       }
     }
 
     function resetBall() {
       ball.pos.set(width / 2, height - 40);
       ball.vel.set(0, -ballSpeed);
-      paddle.w = 100;
+      paddle.w = paddleWidth;
     }
 
     function keyPressed() {
-      if (keyCode === ENTER && (gameState === 'instructions' || gameState === 'settings' || gameState === 'gameover' || gameState === 'win')) {
+      if (keyCode === ENTER) {
         console.log("Enter pressed, handling state:", gameState);
         if (gameState === 'instructions') {
-          select('.instructions').remove();
+          select('.instructions')?.remove();
           showSettingsForm();
           gameState = 'settings';
         } else if (gameState === 'settings') {
           startGame();
         } else if (gameState === 'gameover' || gameState === 'win') {
           if (gameState === 'win') timeLimit *= 0.8;
-          select('.game-over')?.remove();
-          select('.win-screen')?.remove();
+          if (gameOverDiv) {
+            gameOverDiv.remove();
+            gameOverDiv = null;
+          }
+          if (winDiv) {
+            winDiv.remove();
+            winDiv = null;
+          }
+          if (missedMessageDiv) {
+            missedMessageDiv.remove();
+            missedMessageDiv = null;
+          }
           showSettingsForm();
           gameState = 'settings';
         }
@@ -396,8 +582,18 @@
       if (gameState === 'gameover' || gameState === 'win') {
         console.log("Touch started, restarting game");
         if (gameState === 'win') timeLimit *= 0.8;
-        select('.game-over')?.remove();
-        select('.win-screen')?.remove();
+        if (gameOverDiv) {
+          gameOverDiv.remove();
+          gameOverDiv = null;
+        }
+        if (winDiv) {
+          winDiv.remove();
+          winDiv = null;
+        }
+        if (missedMessageDiv) {
+          missedMessageDiv.remove();
+          missedMessageDiv = null;
+        }
         showSettingsForm();
         gameState = 'settings';
       }
@@ -416,7 +612,7 @@
       console.log("Music toggled:", musicPlaying);
     }
 
-    // Mobile controls
+    // Mobile button controls
     let leftBtn = document.getElementById('leftBtn');
     let rightBtn = document.getElementById('rightBtn');
     if (leftBtn) leftBtn.addEventListener('touchstart', (e) => { paddle.x -= 10; e.preventDefault(); });
@@ -426,7 +622,7 @@
 
     // Prevent default touch behavior on canvas
     document.addEventListener('touchstart', (e) => {
-      if (e.target.tagName !== 'BUTTON' && e.target.tagName !== 'INPUT') e.preventDefault();
+      if (e.target.tagName !== 'BUTTON' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'SELECT' && !e.target.classList.contains('touchpad-left') && !e.target.classList.contains('touchpad-right')) e.preventDefault();
     }, { passive: false });
   </script>
 </body>
