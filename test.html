@@ -6,7 +6,6 @@
   <title>Alphabet Breakout</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/addons/p5.sound.min.js"></script>
-
   <style>
     body { margin: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; background: #f0f0f0; }
     canvas { display: block; touch-action: none; }
@@ -122,9 +121,10 @@
     }
 
     function showSettingsForm() {
-      select('.instructions').remove();
+      select('.instructions')?.remove();
       select('.game-over')?.remove();
       select('.win-screen')?.remove();
+      select('.missed-ball')?.remove();
       console.log("Showing settings form");
       let formDiv = createDiv('');
       formDiv.class('settings-form');
@@ -167,9 +167,10 @@
       lives = 3;
       timeLimit = 15 * 60 * 1000;
       console.log("Settings applied:", { lives, timeLimit, ballColor });
-      select('.settings-form').remove();
+      select('.settings-form')?.remove();
       select('.game-over')?.remove();
       select('.win-screen')?.remove();
+      select('.missed-ball')?.remove();
       gameState = 'playing';
       startTime = millis();
       score = 0;
@@ -177,6 +178,7 @@
       currentLetter = 'A';
       initBricks();
       resetBall();
+      showMissedMessage = false;
       currentBackground = backgroundImages.length > 0 ? random(backgroundImages) : null;
     }
 
@@ -194,8 +196,8 @@
           bricks[row][col] = {
             x: col * (width / brickCols) + 10,
             y: row * 30 + 50,
-            w: width / brickCols - 17, // Increased by 3 pixels
-            h: 23, // Increased by 3 pixels
+            w: width / brickCols - 17,
+            h: 23,
             letter: letters[col],
             color: color(random(255), random(255), random(255))
           };
@@ -214,7 +216,7 @@
         return;
       }
 
-      if (isPaused || showMissedMessage) {
+      if (isPaused) {
         fill(0);
         text("Paused", width / 2, height / 2);
         return;
@@ -298,81 +300,83 @@
           if (p.life <= 0) particles.splice(i, 1);
         }
 
-        // Update ball
-        ball.pos.add(ball.vel);
-        if (ball.pos.x - ball.r < 0 || ball.pos.x + ball.r > width) {
-          ball.vel.x *= -1;
-          hitSound.play();
-          multiplier = 1;
-        }
-        if (ball.pos.y - ball.r < 0) {
-          ball.vel.y *= -1;
-          hitSound.play();
-          multiplier = 1;
-        }
-        if (ball.pos.y + ball.r > height) {
-          lives--;
-          if (lives <= 0) {
-            gameState = 'gameover';
-            if (score * multiplier > highScore) {
-              highScore = score * multiplier;
-              localStorage.setItem('highScore', highScore);
-            }
-          } else {
-            showMissedMessage = true;
-            missedMessageStartTime = millis();
-            resetBall();
+        // Update ball (only if not showing missed message)
+        if (!showMissedMessage) {
+          ball.pos.add(ball.vel);
+          if (ball.pos.x - ball.r < 0 || ball.pos.x + ball.r > width) {
+            ball.vel.x *= -1;
+            hitSound.play();
+            multiplier = 1;
           }
-        }
+          if (ball.pos.y - ball.r < 0) {
+            ball.vel.y *= -1;
+            hitSound.play();
+            multiplier = 1;
+          }
+          if (ball.pos.y + ball.r > height) {
+            lives--;
+            if (lives <= 0) {
+              gameState = 'gameover';
+              if (score * multiplier > highScore) {
+                highScore = score * multiplier;
+                localStorage.setItem('highScore', highScore);
+              }
+            } else {
+              showMissedMessage = true;
+              missedMessageStartTime = millis();
+              resetBall();
+            }
+          }
 
-        // Paddle collision
-        if (ball.pos.y + ball.r > paddle.y && ball.pos.x > paddle.x && ball.pos.x < paddle.x + paddle.w) {
-          let hitPos = (ball.pos.x - paddle.x) / paddle.w;
-          ball.vel.set(10 * (hitPos - 0.5), -ballSpeed);
-          hitSound.play();
-          multiplier = 1;
-        }
+          // Paddle collision
+          if (ball.pos.y + ball.r > paddle.y && ball.pos.x > paddle.x && ball.pos.x < paddle.x + paddle.w) {
+            let hitPos = (ball.pos.x - paddle.x) / paddle.w;
+            ball.vel.set(10 * (hitPos - 0.5), -ballSpeed);
+            hitSound.play();
+            multiplier = 1;
+          }
 
-        // Brick collision
-        for (let row = 0; row < brickRows; row++) {
-          for (let col = 0; col < brickCols; col++) {
-            let brick = bricks[row][col];
-            if (brick && ball.pos.y - ball.r < brick.y + brick.h && ball.pos.y + ball.r > brick.y &&
-                ball.pos.x > brick.x && ball.pos.x < brick.x + brick.w) {
-              if (brick.letter === currentLetter) {
-                bricks[row][col] = null;
-                score += multiplier;
-                multiplier++;
-                currentLetter = String.fromCharCode(currentLetter.charCodeAt(0) + 1);
-                correctSound.play();
-                for (let i = 0; i < 10; i++) {
-                  particles.push({
-                    x: brick.x + brick.w / 2,
-                    y: brick.y + brick.h / 2,
-                    vx: random(-2, 2),
-                    vy: random(-2, 2),
-                    life: 20
-                  });
-                }
-                if (random() < 0.1) {
-                  powerUps.push({
-                    x: brick.x + brick.w / 2,
-                    y: brick.y + brick.h,
-                    type: random(['largePaddle', 'fastBall', 'extraLife'])
-                  });
-                }
-                ball.vel.y *= -1;
-                if (score >= 26) {
-                  gameState = 'win';
-                  if (score * multiplier > highScore) {
-                    highScore = score * multiplier;
-                    localStorage.setItem('highScore', highScore);
+          // Brick collision
+          for (let row = 0; row < brickRows; row++) {
+            for (let col = 0; col < brickCols; col++) {
+              let brick = bricks[row][col];
+              if (brick && ball.pos.y - ball.r < brick.y + brick.h && ball.pos.y + ball.r > brick.y &&
+                  ball.pos.x > brick.x && ball.pos.x < brick.x + brick.w) {
+                if (brick.letter === currentLetter) {
+                  bricks[row][col] = null;
+                  score += multiplier;
+                  multiplier++;
+                  currentLetter = String.fromCharCode(currentLetter.charCodeAt(0) + 1);
+                  correctSound.play();
+                  for (let i = 0; i < 10; i++) {
+                    particles.push({
+                      x: brick.x + brick.w / 2,
+                      y: brick.y + brick.h / 2,
+                      vx: random(-2, 2),
+                      vy: random(-2, 2),
+                      life: 20
+                    });
                   }
+                  if (random() < 0.1) {
+                    powerUps.push({
+                      x: brick.x + brick.w / 2,
+                      y: brick.y + brick.h,
+                      type: random(['largePaddle', 'fastBall', 'extraLife'])
+                    });
+                  }
+                  ball.vel.y *= -1;
+                  if (score >= 26) {
+                    gameState = 'win';
+                    if (score * multiplier > highScore) {
+                      highScore = score * multiplier;
+                      localStorage.setItem('highScore', highScore);
+                    }
+                  }
+                } else {
+                  hitSound.play();
+                  ball.vel.y *= -1;
+                  multiplier = 1;
                 }
-              } else {
-                hitSound.play();
-                ball.vel.y *= -1;
-                multiplier = 1;
               }
             }
           }
@@ -401,7 +405,7 @@
             <p>Total Lives Left: ${lives}</p>
           `);
           if (millis() - missedMessageStartTime > 3000) {
-            select('.missed-ball').remove();
+            select('.missed-ball')?.remove();
             showMissedMessage = false;
           }
         }
@@ -439,7 +443,7 @@
       if (keyCode === ENTER) {
         console.log("Enter pressed, handling state:", gameState);
         if (gameState === 'instructions') {
-          select('.instructions').remove();
+          select('.instructions')?.remove();
           showSettingsForm();
           gameState = 'settings';
         } else if (gameState === 'settings') {
@@ -448,6 +452,7 @@
           if (gameState === 'win') timeLimit *= 0.8;
           select('.game-over')?.remove();
           select('.win-screen')?.remove();
+          select('.missed-ball')?.remove();
           showSettingsForm();
           gameState = 'settings';
         }
@@ -467,6 +472,7 @@
         if (gameState === 'win') timeLimit *= 0.8;
         select('.game-over')?.remove();
         select('.win-screen')?.remove();
+        select('.missed-ball')?.remove();
         showSettingsForm();
         gameState = 'settings';
       }
