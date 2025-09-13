@@ -65,12 +65,13 @@
     let showMissedMessage = false, missedMessageStartTime = 0;
     let paddleWidth = window.innerWidth <= 600 ? 80 : 100;
     let ballRadius = window.innerWidth <= 600 ? 15 : 20;
+    let missedMessageDiv = null, gameOverDiv = null, winDiv = null;
 
     function preload() {
       try {
         hitSound = loadSound('bone-crack-1.mp3');
         correctSound = loadSound('button-09a.mp3');
-        powerUpSound = loadSound('bone-crack-1.mp3');
+        powerUpSound = loadSound('powerup.mp3');
         backgroundMusic = loadSound('war_bg_sound.mp3');
         backgroundImages = [
           loadImage('bg3.png'),
@@ -157,6 +158,9 @@
       select('.game-over')?.remove();
       select('.win-screen')?.remove();
       select('.missed-ball')?.remove();
+      missedMessageDiv = null;
+      gameOverDiv = null;
+      winDiv = null;
       console.log("Showing settings form");
       let formDiv = createDiv('');
       formDiv.class('settings-form');
@@ -203,6 +207,9 @@
       select('.game-over')?.remove();
       select('.win-screen')?.remove();
       select('.missed-ball')?.remove();
+      missedMessageDiv = null;
+      gameOverDiv = null;
+      winDiv = null;
       gameState = 'playing';
       startTime = millis();
       score = 0;
@@ -475,38 +482,57 @@
 
         // Missed ball message
         if (showMissedMessage && gameState === 'playing') {
-          let missedDiv = createDiv('');
-          missedDiv.class('missed-ball');
-          missedDiv.html(`
-            <h2>You Missed !!!</h2>
-            <p>Total Lives Left: ${lives}</p>
-          `);
+          if (!missedMessageDiv) {
+            missedMessageDiv = createDiv('');
+            missedMessageDiv.class('missed-ball');
+            missedMessageDiv.html(`
+              <h2>You Missed !!!</h2>
+              <p>Total Lives Left: ${lives}</p>
+            `);
+          }
           if (millis() - missedMessageStartTime > 3000) {
-            select('.missed-ball')?.remove();
+            if (missedMessageDiv) {
+              missedMessageDiv.remove();
+              missedMessageDiv = null;
+            }
             showMissedMessage = false;
           }
         }
       }
 
       if (gameState === 'gameover') {
-        let gameOverDiv = createDiv('');
-        gameOverDiv.class('game-over');
-        gameOverDiv.html(`
-          ${sadEmojiImage ? '<img src="sad-emoji.png" alt="Sad Emoji">' : ''}
-          <p>Game Over! Try Again?</p>
-          <p>High Score: ${highScore}</p>
-          <p>Press Enter or Tap to Restart</p>
-        `);
+        if (!gameOverDiv) {
+          gameOverDiv = createDiv('');
+          gameOverDiv.class('game-over');
+          gameOverDiv.html(`
+            ${sadEmojiImage ? '<img src="sad-emoji.png" alt="Sad Emoji">' : ''}
+            <p>Game Over! Try Again?</p>
+            <p>High Score: ${highScore}</p>
+            <p>Press Enter or Tap to Restart</p>
+          `);
+        }
       } else if (gameState === 'win') {
-        let winDiv = createDiv('');
-        winDiv.class('win-screen');
-        winDiv.html(`
-          ${trophyImage ? '<img src="trophy.png" alt="Trophy">' : ''}
-          <p>Congratulations! You Win!</p>
-          <p>High Score: ${highScore}</p>
-          <p>Retry with ${Math.floor(timeLimit / 1000 / 60 * 0.8)} minutes?</p>
-          <p>Press Enter or Tap to Restart</p>
-        `);
+        if (!winDiv) {
+          winDiv = createDiv('');
+          winDiv.class('win-screen');
+          winDiv.html(`
+            ${trophyImage ? '<img src="trophy.png" alt="Trophy">' : ''}
+            <p>Congratulations! You Win!</p>
+            <p>High Score: ${highScore}</p>
+            <p>Retry with ${Math.floor(timeLimit / 1000 / 60 * 0.8)} minutes?</p>
+            <p>Press Enter or Tap to Restart</p>
+          `);
+        }
+      } else {
+        // Ensure game over and win screens are removed when not in those states
+        if (gameOverDiv) {
+          gameOverDiv.remove();
+          gameOverDiv = null;
+        }
+        if (winDiv) {
+          winDiv.remove();
+          winDiv = null;
+        }
       }
     }
 
@@ -527,9 +553,18 @@
           startGame();
         } else if (gameState === 'gameover' || gameState === 'win') {
           if (gameState === 'win') timeLimit *= 0.8;
-          select('.game-over')?.remove();
-          select('.win-screen')?.remove();
-          select('.missed-ball')?.remove();
+          if (gameOverDiv) {
+            gameOverDiv.remove();
+            gameOverDiv = null;
+          }
+          if (winDiv) {
+            winDiv.remove();
+            winDiv = null;
+          }
+          if (missedMessageDiv) {
+            missedMessageDiv.remove();
+            missedMessageDiv = null;
+          }
           showSettingsForm();
           gameState = 'settings';
         }
@@ -547,9 +582,18 @@
       if (gameState === 'gameover' || gameState === 'win') {
         console.log("Touch started, restarting game");
         if (gameState === 'win') timeLimit *= 0.8;
-        select('.game-over')?.remove();
-        select('.win-screen')?.remove();
-        select('.missed-ball')?.remove();
+        if (gameOverDiv) {
+          gameOverDiv.remove();
+          gameOverDiv = null;
+        }
+        if (winDiv) {
+          winDiv.remove();
+          winDiv = null;
+        }
+        if (missedMessageDiv) {
+          missedMessageDiv.remove();
+          missedMessageDiv = null;
+        }
         showSettingsForm();
         gameState = 'settings';
       }
