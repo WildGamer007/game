@@ -37,10 +37,10 @@
     }
     .instructions, .settings-form { text-align: center; background: white; padding: 20px; border-radius: 10px; max-width: 600px; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); }
     .instructions h2, .settings-form h2 { margin: 0 0 10px; font-weight: bold; color: black; }
-    .instructions p { margin: 5px 0; font-weight: bold; color: black; }
+    .instructions p, .settings-form p { margin: 5px 0; font-weight: bold; color: black; }
     .settings-form label { display: block; margin: 10px 0 5px; font-weight: bold; color: black; }
     .settings-form select { padding: 5px; font-size: 16px; width: 200px; border-radius: 5px; }
-    .game-over, .win-screen { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; background: white; padding: 20px; border-radius: 10px; z-index: 10; }
+    .game-over, .win-screen, .missed-ball { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; background: white; padding: 20px; border-radius: 10px; z-index: 10; }
     .game-over img, .win-screen img { max-width: 100px; }
   </style>
 </head>
@@ -61,6 +61,7 @@
     let startTime, elapsedTime = 0, isPaused = false, musicPlaying = true;
     let powerUps = [], particles = [], ballSpeed = 5, highScore = localStorage.getItem('highScore') || 0;
     const brickRows = 3, brickCols = 10;
+    let showMissedMessage = false, missedMessageStartTime = 0;
 
     function preload() {
       try {
@@ -122,6 +123,8 @@
 
     function showSettingsForm() {
       select('.instructions').remove();
+      select('.game-over')?.remove();
+      select('.win-screen')?.remove();
       console.log("Showing settings form");
       let formDiv = createDiv('');
       formDiv.class('settings-form');
@@ -165,6 +168,8 @@
       timeLimit = 15 * 60 * 1000;
       console.log("Settings applied:", { lives, timeLimit, ballColor });
       select('.settings-form').remove();
+      select('.game-over')?.remove();
+      select('.win-screen')?.remove();
       gameState = 'playing';
       startTime = millis();
       score = 0;
@@ -314,6 +319,8 @@
               localStorage.setItem('highScore', highScore);
             }
           } else {
+            showMissedMessage = true;
+            missedMessageStartTime = millis();
             resetBall();
           }
         }
@@ -384,6 +391,20 @@
         // Draw UI
         fill(0);
         text(`Lives: ${lives} | Time: ${Math.floor((timeLimit - elapsedTime) / 1000)}s | Letter: ${currentLetter} | Score: ${score * multiplier} | Multiplier: ${multiplier}x | High Score: ${highScore}`, width / 2, 20);
+
+        // Missed ball message
+        if (showMissedMessage && gameState === 'playing') {
+          let missedDiv = createDiv('');
+          missedDiv.class('missed-ball');
+          missedDiv.html(`
+            <h2>You Missed !!!</h2>
+            <p>Total Lives Left: ${lives}</p>
+          `);
+          if (millis() - missedMessageStartTime > 2000) {
+            select('.missed-ball').remove();
+            showMissedMessage = false;
+          }
+        }
       }
 
       if (gameState === 'gameover') {
