@@ -11,35 +11,34 @@
     canvas { display: block; touch-action: none; }
     .controls { position: absolute; bottom: 10px; display: flex; gap: 10px; }
     .mobile-controls { display: none; }
+    .touchpad-left, .touchpad-right { 
+      position: absolute; bottom: 0; height: 50%; width: 40%; background: rgba(0, 0, 0, 0.1); 
+      display: none; z-index: 5; opacity: 0.3; transition: opacity 0.2s; }
+    .touchpad-left:active, .touchpad-right:active { opacity: 0.5; }
+    .touchpad-left { left: 0; }
+    .touchpad-right { right: 0; }
     @media (max-width: 600px) {
       .mobile-controls { display: flex; }
+      .touchpad-left, .touchpad-right { display: block; }
     }
     button { 
-      padding: 12px 24px; 
-      font-size: 16px; 
-      cursor: pointer; 
-      border: none; 
-      border-radius: 12px; 
-      background: linear-gradient(135deg, #ff6f61, #ffb88c); 
-      color: white; 
-      font-weight: bold; 
-      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2); 
-      transition: transform 0.2s, box-shadow 0.2s; 
-    }
-    button:hover { 
-      transform: translateY(-2px); 
-      box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3); 
-    }
-    button:active { 
-      transform: translateY(0); 
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2); 
-    }
-    .instructions, .settings-form { text-align: center; background: white; padding: 20px; border-radius: 10px; max-width: 600px; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); }
-    .instructions h2, .settings-form h2 { margin: 0 0 10px; font-weight: bold; color: black; }
-    .instructions p, .settings-form p { margin: 5px 0; font-weight: bold; color: black; }
-    .settings-form label { display: block; margin: 10px 0 5px; font-weight: bold; color: black; }
+      padding: 12px 24px; font-size: 16px; cursor: pointer; border: none; 
+      border-radius: 12px; background: linear-gradient(135deg, #ff6f61, #ffb88c); 
+      color: white; font-weight: bold; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2); 
+      transition: transform 0.2s, box-shadow 0.2s; }
+    button:hover { transform: translateY(-2px); box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3); }
+    button:active { transform: translateY(0); box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2); }
+    .instructions, .settings-form { text-align: center; background: white; padding: 20px; 
+      border-radius: 10px; max-width: 600px; position: absolute; top: 50%; left: 50%; 
+      transform: translate(-50%, -50%); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3); }
+    .instructions h2, .settings-form h2 { margin: 0 0 10px; font-weight: bold; color: #333; }
+    .instructions p, .settings-form p { margin: 5px 0; font-weight: bold; color: #333; }
+    .settings-form label { display: block; margin: 10px 0 5px; font-weight: bold; color: #333; }
     .settings-form select { padding: 5px; font-size: 16px; width: 200px; border-radius: 5px; }
-    .game-over, .win-screen, .missed-ball { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; background: white; padding: 20px; border-radius: 10px; z-index: 10; }
+    .game-over, .win-screen, .missed-ball { 
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
+      text-align: center; background: white; padding: 20px; border-radius: 10px; 
+      z-index: 10; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3); }
     .game-over img, .win-screen img { max-width: 100px; }
   </style>
 </head>
@@ -50,22 +49,28 @@
     <button id="pauseBtn">Pause</button>
     <button id="musicBtn">Music: On</button>
   </div>
+  <div class="touchpad-left"></div>
+  <div class="touchpad-right"></div>
   <script>
     let paddle, ball, bricks = [];
     let lives = 3, timeLimit = 15 * 60 * 1000, ballColor = 'red';
     let gameState = 'instructions', currentLetter = 'A', score = 0, multiplier = 1;
-    let hitSound, correctSound, backgroundMusic;
+    let hitSound, correctSound, powerUpSound, backgroundMusic;
     let backgroundImages = [], currentBackground;
     let trophyImage, sadEmojiImage;
     let startTime, elapsedTime = 0, isPaused = false, musicPlaying = true;
     let powerUps = [], particles = [], ballSpeed = 5, highScore = localStorage.getItem('highScore') || 0;
+    let bgParticles = [], scorePopups = [];
     const brickRows = 3, brickCols = 10;
     let showMissedMessage = false, missedMessageStartTime = 0;
+    let paddleWidth = window.innerWidth <= 600 ? 80 : 100;
+    let ballRadius = window.innerWidth <= 600 ? 15 : 20;
 
     function preload() {
       try {
         hitSound = loadSound('bone-crack-1.mp3');
         correctSound = loadSound('button-09a.mp3');
+        powerUpSound = loadSound('powerup.mp3');
         backgroundMusic = loadSound('war_bg_sound.mp3');
         backgroundImages = [
           loadImage('bg3.png'),
@@ -79,6 +84,7 @@
         console.warn("Asset loading failed:", e.message);
         hitSound = { play: () => {} };
         correctSound = { play: () => {} };
+        powerUpSound = { play: () => {} };
         backgroundMusic = { loop: () => {}, stop: () => {} };
         backgroundImages = [];
         trophyImage = null;
@@ -88,15 +94,41 @@
 
     function setup() {
       createCanvas(800, 600);
-      paddle = createVector(width / 2 - 50, height - 20);
-      paddle.w = 100;
-      ball = { pos: createVector(width / 2, height - 40), vel: createVector(0, -ballSpeed), r: 20 };
+      paddle = createVector(width / 2 - paddleWidth / 2, height - 20);
+      paddle.w = paddleWidth;
+      ball = { pos: createVector(width / 2, height - 40), vel: createVector(0, -ballSpeed), r: ballRadius };
       initBricks();
+      initBgParticles();
       if (musicPlaying) backgroundMusic.loop();
       textAlign(CENTER, CENTER);
       textSize(20);
       currentBackground = backgroundImages.length > 0 ? random(backgroundImages) : null;
       showInstructions();
+
+      // Touchpad controls for mobile
+      let touchpadLeft = document.querySelector('.touchpad-left');
+      let touchpadRight = document.querySelector('.touchpad-right');
+      if (touchpadLeft) {
+        touchpadLeft.addEventListener('touchstart', (e) => { paddle.x -= 10; e.preventDefault(); });
+        touchpadLeft.addEventListener('touchmove', (e) => { paddle.x -= 10; e.preventDefault(); });
+      }
+      if (touchpadRight) {
+        touchpadRight.addEventListener('touchstart', (e) => { paddle.x += 10; e.preventDefault(); });
+        touchpadRight.addEventListener('touchmove', (e) => { paddle.x += 10; e.preventDefault(); });
+      }
+    }
+
+    function initBgParticles() {
+      for (let i = 0; i < 50; i++) {
+        bgParticles.push({
+          x: random(width),
+          y: random(height),
+          vx: random(-0.5, 0.5),
+          vy: random(-0.5, 0.5),
+          size: random(2, 5),
+          alpha: random(50, 100)
+        });
+      }
     }
 
     function showInstructions() {
@@ -106,10 +138,10 @@
       instrDiv.html(`
         <h2>Instructions</h2>
         <p>PC: Use Left/Right arrow keys to move paddle</p>
-        <p>Mobile: Use Left/Right buttons to move paddle</p>
+        <p>Mobile: Use touchpads or Left/Right buttons</p>
         <p>Hit bricks in alphabetical order (A to Z)</p>
         <p>Consecutive hits increase score multiplier</p>
-        <p>Catch power-ups for bonuses</p>
+        <p>Catch power-ups for bonuses (Large Paddle, Fast/Slow Ball, Extra Life)</p>
         <p>Press P or Pause button to pause</p>
         <p>Press M or Music button to toggle music</p>
         <button id="startBtn">Start Game</button>
@@ -179,6 +211,7 @@
       initBricks();
       resetBall();
       showMissedMessage = false;
+      scorePopups = [];
       currentBackground = backgroundImages.length > 0 ? random(backgroundImages) : null;
     }
 
@@ -199,7 +232,8 @@
             w: width / brickCols - 17,
             h: 23,
             letter: letters[col],
-            color: color(random(255), random(255), random(255))
+            color: color(random(100, 255), random(100, 255), random(100, 255)),
+            glow: 0
           };
         }
       }
@@ -209,7 +243,18 @@
       if (currentBackground) {
         image(currentBackground, 0, 0, width, height);
       } else {
-        background(220);
+        background(50, 50, 80);
+      }
+
+      // Draw background particles
+      for (let p of bgParticles) {
+        fill(255, 255, 255, p.alpha);
+        noStroke();
+        ellipse(p.x, p.y, p.size);
+        p.x += p.vx;
+        p.y += p.vy;
+        if (p.x < 0 || p.x > width) p.vx *= -1;
+        if (p.y < 0 || p.y > height) p.vy *= -1;
       }
 
       if (gameState === 'instructions' || gameState === 'settings') {
@@ -217,7 +262,9 @@
       }
 
       if (isPaused) {
-        fill(0);
+        fill(0, 0, 0, 200);
+        rect(0, 0, width, height);
+        fill(255);
         text("Paused", width / 2, height / 2);
         return;
       }
@@ -232,12 +279,18 @@
         ballSpeed = 5 + Math.min(Math.floor(elapsedTime / 30000 + score / 5), 5);
         ball.vel.setMag(ballSpeed);
 
-        // Draw paddle
+        // Draw paddle with shadow
+        drawingContext.shadowBlur = 10;
+        drawingContext.shadowColor = 'rgba(0, 0, 0, 0.5)';
         fill(0, 0, 255);
-        rect(paddle.x, paddle.y, paddle.w, 10);
+        rect(paddle.x, paddle.y, paddle.w, 10, 5);
+        drawingContext.shadowBlur = 0;
 
-        // Draw ball
-        fill(ballColor);
+        // Draw ball with gradient
+        let gradient = drawingContext.createRadialGradient(ball.pos.x, ball.pos.y, ball.r / 2, ball.pos.x, ball.pos.y, ball.r);
+        gradient.addColorStop(0, ballColor);
+        gradient.addColorStop(1, 'white');
+        drawingContext.fillStyle = gradient;
         noStroke();
         ellipse(ball.pos.x, ball.pos.y, ball.r * 2);
 
@@ -250,9 +303,14 @@
               if (isTarget) {
                 vibX = sin(millis() / 100) * 2;
                 vibY = cos(millis() / 150) * 1;
+                brick.glow = min(brick.glow + 0.1, 10);
+              } else {
+                brick.glow = max(brick.glow - 0.1, 0);
               }
               push();
               translate(brick.x + brick.w / 2 + vibX, brick.y + brick.h / 2 + vibY);
+              drawingContext.shadowBlur = brick.glow;
+              drawingContext.shadowColor = 'yellow';
               let c1 = color(100, 100, 255);
               let c2 = brick.color;
               for (let i = 0; i < brick.h; i++) {
@@ -266,6 +324,7 @@
               strokeWeight(2);
               noFill();
               rect(-brick.w / 2, -brick.h / 2, brick.w, brick.h);
+              drawingContext.shadowBlur = 0;
               pop();
               fill(255);
               textSize(16);
@@ -277,14 +336,16 @@
         // Draw power-ups
         for (let i = powerUps.length - 1; i >= 0; i--) {
           let p = powerUps[i];
-          fill(p.type === 'largePaddle' ? 'green' : p.type === 'fastBall' ? 'red' : 'yellow');
+          fill(p.type === 'largePaddle' ? 'green' : p.type === 'fastBall' ? 'red' : p.type === 'slowBall' ? 'blue' : 'yellow');
           ellipse(p.x, p.y, 20);
           p.y += 3;
           if (p.y > height) powerUps.splice(i, 1);
           if (p.y + 10 > paddle.y && p.x > paddle.x && p.x < paddle.x + paddle.w) {
-            if (p.type === 'largePaddle') paddle.w = 150;
+            if (p.type === 'largePaddle') paddle.w = paddleWidth * 1.5;
             else if (p.type === 'fastBall') ballSpeed += 2;
+            else if (p.type === 'slowBall') ballSpeed = max(ballSpeed - 2, 3);
             else if (p.type === 'extraLife') lives++;
+            powerUpSound.play();
             powerUps.splice(i, 1);
           }
         }
@@ -292,12 +353,23 @@
         // Draw particles
         for (let i = particles.length - 1; i >= 0; i--) {
           let p = particles[i];
-          fill(255, 255, 0);
+          fill(255, 255, 0, map(p.life, 0, 20, 0, 255));
           ellipse(p.x, p.y, 5);
           p.x += p.vx;
           p.y += p.vy;
           p.life--;
           if (p.life <= 0) particles.splice(i, 1);
+        }
+
+        // Draw score popups
+        for (let i = scorePopups.length - 1; i >= 0; i--) {
+          let s = scorePopups[i];
+          fill(255, 255, 0, map(s.life, 0, 30, 0, 255));
+          textSize(16);
+          text(`+${s.points}`, s.x, s.y);
+          s.y -= 1;
+          s.life--;
+          if (s.life <= 0) scorePopups.splice(i, 1);
         }
 
         // Update ball (only if not showing missed message)
@@ -344,24 +416,26 @@
                   ball.pos.x > brick.x && ball.pos.x < brick.x + brick.w) {
                 if (brick.letter === currentLetter) {
                   bricks[row][col] = null;
-                  score += multiplier;
+                  let points = multiplier;
+                  score += points;
                   multiplier++;
+                  scorePopups.push({ x: brick.x + brick.w / 2, y: brick.y, points: points, life: 30 });
                   currentLetter = String.fromCharCode(currentLetter.charCodeAt(0) + 1);
                   correctSound.play();
-                  for (let i = 0; i < 10; i++) {
+                  for (let i = 0; i < 20; i++) {
                     particles.push({
                       x: brick.x + brick.w / 2,
                       y: brick.y + brick.h / 2,
-                      vx: random(-2, 2),
-                      vy: random(-2, 2),
+                      vx: random(-3, 3),
+                      vy: random(-3, 3),
                       life: 20
                     });
                   }
-                  if (random() < 0.1) {
+                  if (random() < 0.15) {
                     powerUps.push({
                       x: brick.x + brick.w / 2,
                       y: brick.y + brick.h,
-                      type: random(['largePaddle', 'fastBall', 'extraLife'])
+                      type: random(['largePaddle', 'fastBall', 'slowBall', 'extraLife'])
                     });
                   }
                   ball.vel.y *= -1;
@@ -393,8 +467,11 @@
         }
 
         // Draw UI
-        fill(0);
+        fill(255);
+        drawingContext.shadowBlur = 5;
+        drawingContext.shadowColor = 'rgba(0, 0, 0, 0.5)';
         text(`Lives: ${lives} | Time: ${Math.floor((timeLimit - elapsedTime) / 1000)}s | Letter: ${currentLetter} | Score: ${score * multiplier} | Multiplier: ${multiplier}x | High Score: ${highScore}`, width / 2, 20);
+        drawingContext.shadowBlur = 0;
 
         // Missed ball message
         if (showMissedMessage && gameState === 'playing') {
@@ -436,7 +513,7 @@
     function resetBall() {
       ball.pos.set(width / 2, height - 40);
       ball.vel.set(0, -ballSpeed);
-      paddle.w = 100;
+      paddle.w = paddleWidth;
     }
 
     function keyPressed() {
@@ -491,7 +568,7 @@
       console.log("Music toggled:", musicPlaying);
     }
 
-    // Mobile controls
+    // Mobile button controls
     let leftBtn = document.getElementById('leftBtn');
     let rightBtn = document.getElementById('rightBtn');
     if (leftBtn) leftBtn.addEventListener('touchstart', (e) => { paddle.x -= 10; e.preventDefault(); });
@@ -501,7 +578,7 @@
 
     // Prevent default touch behavior on canvas
     document.addEventListener('touchstart', (e) => {
-      if (e.target.tagName !== 'BUTTON' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'SELECT') e.preventDefault();
+      if (e.target.tagName !== 'BUTTON' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'SELECT' && !e.target.classList.contains('touchpad-left') && !e.target.classList.contains('touchpad-right')) e.preventDefault();
     }, { passive: false });
   </script>
 </body>
