@@ -15,12 +15,31 @@
     @media (max-width: 600px) {
       .mobile-controls { display: flex; }
     }
-    button { padding: 10px; font-size: 16px; cursor: pointer; }
+    button { 
+      padding: 12px 24px; 
+      font-size: 16px; 
+      cursor: pointer; 
+      border: none; 
+      border-radius: 12px; 
+      background: linear-gradient(135deg, #ff6f61, #ffb88c); 
+      color: white; 
+      font-weight: bold; 
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2); 
+      transition: transform 0.2s, box-shadow 0.2s; 
+    }
+    button:hover { 
+      transform: translateY(-2px); 
+      box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3); 
+    }
+    button:active { 
+      transform: translateY(0); 
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2); 
+    }
     .instructions, .settings-form { text-align: center; background: white; padding: 20px; border-radius: 10px; max-width: 600px; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); }
     .instructions h2, .settings-form h2 { margin: 0 0 10px; font-weight: bold; color: black; }
     .instructions p { margin: 5px 0; font-weight: bold; color: black; }
     .settings-form label { display: block; margin: 10px 0 5px; font-weight: bold; color: black; }
-    .settings-form select { padding: 5px; font-size: 16px; width: 200px; }
+    .settings-form select { padding: 5px; font-size: 16px; width: 200px; border-radius: 5px; }
     .game-over, .win-screen { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; background: white; padding: 20px; border-radius: 10px; z-index: 10; }
     .game-over img, .win-screen img { max-width: 100px; }
   </style>
@@ -108,8 +127,10 @@
       formDiv.class('settings-form');
       formDiv.html(`
         <h2>Game Settings</h2>
+        <p>Player Lives: 3</p>
+        <p>Game Time: 15 minutes</p>
         <label for="ballColor">Ball Color:</label>
-        <select id="ballColor">
+        <select id="ballColor" onchange="updateBallColor()">
           <option value="red" ${ballColor === 'red' ? 'selected' : ''}>Red</option>
           <option value="blue" ${ballColor === 'blue' ? 'selected' : ''}>Blue</option>
           <option value="green" ${ballColor === 'green' ? 'selected' : ''}>Green</option>
@@ -120,6 +141,14 @@
         console.log("Submit button clicked");
         startGame();
       });
+    }
+
+    function updateBallColor() {
+      let ballColorInput = select('#ballColor');
+      if (ballColorInput) {
+        ballColor = ballColorInput.value();
+        console.log("Ball color updated to:", ballColor);
+      }
     }
 
     function startGame() {
@@ -358,22 +387,24 @@
       }
 
       if (gameState === 'gameover') {
-        fill(0);
-        if (sadEmojiImage) {
-          image(sadEmojiImage, width / 2 - 50, height / 2 - 100, 100, 100);
-        }
-        text("Game Over! Try Again?", width / 2, height / 2 + 50);
-        text(`High Score: ${highScore}`, width / 2, height / 2 + 80);
-        text("Press Enter or Tap to Restart", width / 2, height / 2 + 110);
+        let gameOverDiv = createDiv('');
+        gameOverDiv.class('game-over');
+        gameOverDiv.html(`
+          ${sadEmojiImage ? '<img src="sad-emoji.png" alt="Sad Emoji">' : ''}
+          <p>Game Over! Try Again?</p>
+          <p>High Score: ${highScore}</p>
+          <p>Press Enter or Tap to Restart</p>
+        `);
       } else if (gameState === 'win') {
-        fill(0);
-        if (trophyImage) {
-          image(trophyImage, width / 2 - 50, height / 2 - 100, 100, 100);
-        }
-        text("Congratulations! You Win!", width / 2, height / 2 + 50);
-        text(`High Score: ${highScore}`, width / 2, height / 2 + 80);
-        text(`Retry with ${Math.floor(timeLimit / 1000 / 60 * 0.8)} minutes?`, width / 2, height / 2 + 110);
-        text("Press Enter or Tap to Restart", width / 2, height / 2 + 140);
+        let winDiv = createDiv('');
+        winDiv.class('win-screen');
+        winDiv.html(`
+          ${trophyImage ? '<img src="trophy.png" alt="Trophy">' : ''}
+          <p>Congratulations! You Win!</p>
+          <p>High Score: ${highScore}</p>
+          <p>Retry with ${Math.floor(timeLimit / 1000 / 60 * 0.8)} minutes?</p>
+          <p>Press Enter or Tap to Restart</p>
+        `);
       }
     }
 
@@ -384,7 +415,7 @@
     }
 
     function keyPressed() {
-      if (keyCode === ENTER && (gameState === 'instructions' || gameState === 'settings' || gameState === 'gameover' || gameState === 'win')) {
+      if (keyCode === ENTER) {
         console.log("Enter pressed, handling state:", gameState);
         if (gameState === 'instructions') {
           select('.instructions').remove();
